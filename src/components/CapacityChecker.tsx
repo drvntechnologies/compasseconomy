@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Airport, Route, PaxPool } from '../lib/types';
 import { Search, Users, ArrowRight, Plane, MapPin, AlertCircle } from 'lucide-react';
@@ -9,9 +9,11 @@ interface CapacityCheckerProps {
   routes: Route[];
 }
 
+type ReachType = 'terminating' | '1-hop' | '2-hop';
+
 interface PaxBreakdown {
   pool: PaxPool;
-  type: 'terminating' | 'connecting';
+  type: ReachType;
 }
 
 export default function CapacityChecker({ airports, routes }: CapacityCheckerProps) {
@@ -22,15 +24,10 @@ export default function CapacityChecker({ airports, routes }: CapacityCheckerPro
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const availableRoutes = routes.filter(r => r.is_active && r.departure_icao === departure);
+  const activeRoutes = useMemo(() => routes.filter(r => r.is_active), [routes]);
+  const availableRoutes = activeRoutes.filter(r => r.departure_icao === departure);
   const arrivalOptions = useMemo(() => [...new Set(availableRoutes.map(r => r.arrival_icao))].sort(), [availableRoutes]);
   const allAirportCodes = useMemo(() => airports.map(a => a.icao_code).sort(), [airports]);
-
-  useEffect(() => {
-    if (arrival && !arrivalOptions.includes(arrival)) {
-      setArrival('');
-    }
-  }, [departure]);
 
   async function checkCapacity() {
     if (!departure || !arrival || seats <= 0) {
@@ -69,45 +66,92 @@ export default function CapacityChecker({ airports, routes }: CapacityCheckerPro
       }
     }
 
-    const eligible = allRows.filter(pool => {
-      if (pool.destination_icao === arrival) return true;
-      if (pool.connections_remaining > 0) {
-        const canReachFromArrival = canReachDestination(arrival, pool.destination_icao, pool.connections_remaining - 1);
-        return canReachFromArrival;
-      }
-      return false;
+    // Build reachability sets exactly as Dispatch does
+    const arrivalIcao = arrival.toUpperCase();
+    const departureIcao = departure.toUpperCase();
+
+    // 1-hop: destinations directly reachable from the arrival airport
+    const destsFromArrival = new Set(
+      activeRoutes.filter(r => r.departure_icao === arrivalIcao).map(r => r.arrival_icao)
+    );
+
+    // 2-hop: destinations reachable from arrival via one intermediate
+    const destsFromArrival2Hop = new Set<string>();
+    destsFromArrival.forEach(intermediate => {
+      activeRoutes.filter(r => r.departure_icao === intermediate).forEach(r => {
+        destsFromArrival2Hop.add(r.arrival_icao);
+      });
     });
 
-    const breakdown: PaxBreakdown[] = eligible.map(pool => ({
-      pool,
-      type: pool.destination_icao === arrival ? 'terminating' : 'connecting',
-    }));
+    // Better-route exclusion: 1-hop reachability via OTHER routes from departure
+    const otherIntermediates = activeRoutes
+      .filter(r => r.departure_icao === departureIcao && r.arrival_icao !== arrivalIcao)
+      .map(r => r.arrival_icao);
+    const destsViaOtherRoutes1Hop = new Set<string>();
+    otherIntermediates.forEach(intermediate => {
+      activeRoutes.filter(r => r.departure_icao === intermediate).forEach(r => {
+        destsViaOtherRoutes1Hop.add(r.arrival_icao);
+      });
+    });
 
+    // Filter eligible pools using the same logic as Dispatch
+    const breakdown: PaxBreakdown[] = [];
+
+    for (const pool of allRows) {
+      if (pool.destination_icao === arrivalIcao) {
+        breakdown.push({ pool, type: 'terminating' });
+      } else if (pool.connections_remaining > 0 && destsFromArrival.has(pool.destination_icao)) {
+        breakdown.push({ pool, type: '1-hop' });
+      } else if (pool.connections_remaining > 1 && destsFromArrival2Hop.has(pool.destination_icao)) {
+        // Better-route exclusion: skip if a 1-hop path exists via another route
+        if (destsViaOtherRoutes1Hop.has(pool.destination_icao)) continue;
+        breakdown.push({ pool, type: '2-hop' });
+      }
+    }
+
+    // Sort matching Dispatch priority: terminating > 1-hop > 2-hop > layover > fewer connections
     breakdown.sort((a, b) => {
-      if (a.type === 'terminating' && b.type !== 'terminating') return -1;
-      if (a.type !== 'terminating' && b.type === 'terminating') return 1;
-      return b.pool.pax_count - a.pool.pax_count;
+      const typeOrder: Record<ReachType, number> = { 'terminating': 0, '1-hop': 1, '2-hop': 2 };
+      if (typeOrder[a.type] !== typeOrder[b.type]) return typeOrder[a.type] - typeOrder[b.type];
+      // 1-hop reachable before 2-hop already handled above
+      const aDirectReach = destsFromArrival.has(a.pool.destination_icao) ? 0 : 1;
+      const bDirectReach = destsFromArrival.has(b.pool.destination_icao) ? 0 : 1;
+      if (aDirectReach !== bDirectReach) return aDirectReach - bDirectReach;
+      const aIsLayover = a.pool.status === 'layover' ? 0 : 1;
+      const bIsLayover = b.pool.status === 'layover' ? 0 : 1;
+      if (aIsLayover !== bIsLayover) return aIsLayover - bIsLayover;
+      return a.pool.connections_remaining - b.pool.connections_remaining;
     });
 
     setResults(breakdown);
     setLoading(false);
   }
 
-  function canReachDestination(fromIcao: string, destIcao: string, hopsLeft: number): boolean {
-    if (hopsLeft < 0) return false;
-    const activeRoutes = routes.filter(r => r.is_active && r.departure_icao === fromIcao);
-    for (const r of activeRoutes) {
-      if (r.arrival_icao === destIcao) return true;
-      if (hopsLeft > 0 && canReachDestination(r.arrival_icao, destIcao, hopsLeft - 1)) return true;
-    }
-    return false;
-  }
-
   const totalEligible = results?.reduce((s, r) => s + r.pool.pax_count, 0) ?? 0;
   const terminatingPax = results?.filter(r => r.type === 'terminating').reduce((s, r) => s + r.pool.pax_count, 0) ?? 0;
-  const connectingPax = results?.filter(r => r.type === 'connecting').reduce((s, r) => s + r.pool.pax_count, 0) ?? 0;
+  const connectingPax = results?.filter(r => r.type !== 'terminating').reduce((s, r) => s + r.pool.pax_count, 0) ?? 0;
+  const oneHopPax = results?.filter(r => r.type === '1-hop').reduce((s, r) => s + r.pool.pax_count, 0) ?? 0;
+  const twoHopPax = results?.filter(r => r.type === '2-hop').reduce((s, r) => s + r.pool.pax_count, 0) ?? 0;
   const boarding = Math.min(totalEligible, seats);
   const leftBehind = Math.max(0, totalEligible - seats);
+
+  // Grouped manifest (same as Dispatch)
+  const manifest = useMemo(() => {
+    if (!results || results.length === 0) return [];
+    const grouped: Record<string, { origin_icao: string; destination_icao: string; pax_count: number; type: ReachType }> = {};
+    for (const r of results) {
+      const key = `${r.pool.origin_icao}-${r.pool.destination_icao}`;
+      if (!grouped[key]) {
+        grouped[key] = { origin_icao: r.pool.origin_icao, destination_icao: r.pool.destination_icao, pax_count: 0, type: r.type };
+      }
+      grouped[key].pax_count += r.pool.pax_count;
+    }
+    return Object.values(grouped).sort((a, b) => {
+      const typeOrder: Record<ReachType, number> = { 'terminating': 0, '1-hop': 1, '2-hop': 2 };
+      if (typeOrder[a.type] !== typeOrder[b.type]) return typeOrder[a.type] - typeOrder[b.type];
+      return b.pax_count - a.pax_count;
+    });
+  }, [results]);
 
   return (
     <div className="space-y-6">
@@ -119,7 +163,7 @@ export default function CapacityChecker({ airports, routes }: CapacityCheckerPro
           </div>
           <div>
             <h2 className="text-white font-semibold text-lg">Capacity Checker</h2>
-            <p className="text-slate-400 text-sm">Check passenger demand for a specific leg</p>
+            <p className="text-slate-400 text-sm">Check total passenger demand for a specific leg</p>
           </div>
         </div>
 
@@ -128,7 +172,7 @@ export default function CapacityChecker({ airports, routes }: CapacityCheckerPro
             <label className="block text-xs text-slate-400 mb-1.5 font-medium">Departure</label>
             <SearchableSelect
               value={departure}
-              onChange={setDeparture}
+              onChange={(v) => { setDeparture(v); if (arrival && !routes.some(r => r.is_active && r.departure_icao === v && r.arrival_icao === arrival)) setArrival(''); }}
               options={allAirportCodes}
               placeholder="Search airport..."
               airports={airports}
@@ -171,7 +215,7 @@ export default function CapacityChecker({ airports, routes }: CapacityCheckerPro
           disabled={loading || !departure || !arrival || seats <= 0}
           className="w-full sm:w-auto px-6 py-2.5 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-600 disabled:text-slate-400 text-slate-900 font-semibold text-sm rounded-lg transition-all"
         >
-          {loading ? 'Checking...' : 'Check Capacity'}
+          {loading ? 'Checking...' : 'Check Demand'}
         </button>
       </div>
 
@@ -179,9 +223,9 @@ export default function CapacityChecker({ airports, routes }: CapacityCheckerPro
       {results !== null && (
         <div className="space-y-4">
           {/* Summary Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
-              <p className="text-slate-400 text-xs mb-1">Total Eligible</p>
+              <p className="text-slate-400 text-xs mb-1">Total Demand</p>
               <p className="text-2xl font-bold text-white">{totalEligible}</p>
             </div>
             <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
@@ -189,12 +233,16 @@ export default function CapacityChecker({ airports, routes }: CapacityCheckerPro
               <p className={`text-2xl font-bold ${boarding >= seats ? 'text-emerald-400' : 'text-amber-400'}`}>{boarding}</p>
             </div>
             <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
-              <p className="text-slate-400 text-xs mb-1">Final Dest. Here</p>
+              <p className="text-slate-400 text-xs mb-1">Terminating</p>
               <p className="text-2xl font-bold text-sky-400">{terminatingPax}</p>
             </div>
             <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
-              <p className="text-slate-400 text-xs mb-1">Connecting Thru</p>
-              <p className="text-2xl font-bold text-violet-400">{connectingPax}</p>
+              <p className="text-slate-400 text-xs mb-1">1-Hop Connect</p>
+              <p className="text-2xl font-bold text-violet-400">{oneHopPax}</p>
+            </div>
+            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+              <p className="text-slate-400 text-xs mb-1">2-Hop Connect</p>
+              <p className="text-2xl font-bold text-amber-400">{twoHopPax}</p>
             </div>
           </div>
 
@@ -224,65 +272,49 @@ export default function CapacityChecker({ airports, routes }: CapacityCheckerPro
             )}
           </div>
 
-          {/* Breakdown table */}
+          {/* Grouped Manifest */}
           <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-700">
-              <h3 className="text-white font-medium text-sm">Passenger Breakdown</h3>
+            <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+              <h3 className="text-white font-medium text-sm">Demand Manifest</h3>
+              <span className="text-xs text-slate-500">{manifest.length} group{manifest.length !== 1 ? 's' : ''}</span>
             </div>
-            {results.length === 0 ? (
+            {manifest.length === 0 ? (
               <div className="p-8 text-center text-slate-500">
                 <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
                 <p>No eligible passengers at {departure} for this leg</p>
               </div>
             ) : (
-              <div className="divide-y divide-slate-700/50">
-                <div className="grid grid-cols-12 gap-2 px-4 py-2 text-xs text-slate-500 font-medium bg-slate-900/30">
-                  <div className="col-span-2">PAX</div>
-                  <div className="col-span-3">Origin</div>
-                  <div className="col-span-3">Final Dest</div>
-                  <div className="col-span-2">Type</div>
-                  <div className="col-span-2">Status</div>
-                </div>
-                {results.map((r, i) => (
-                  <div
-                    key={r.pool.id}
-                    className={`grid grid-cols-12 gap-2 px-4 py-2.5 text-sm items-center ${
-                      i < seats ? '' : 'opacity-40'
-                    }`}
-                  >
-                    <div className="col-span-2 font-mono font-semibold text-white">
-                      {r.pool.pax_count}
-                    </div>
-                    <div className="col-span-3 flex items-center gap-1.5">
-                      <MapPin className="w-3 h-3 text-slate-500" />
-                      <span className="text-slate-300">{r.pool.origin_icao}</span>
-                    </div>
-                    <div className="col-span-3 flex items-center gap-1.5">
-                      <Plane className="w-3 h-3 text-slate-500" />
-                      <span className="text-slate-300">{r.pool.destination_icao}</span>
-                    </div>
-                    <div className="col-span-2">
-                      {r.type === 'terminating' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-sky-500/10 text-sky-400">
-                          Final
+              <div className="p-4">
+                <div className="space-y-1.5">
+                  {manifest.map(row => (
+                    <div key={`${row.origin_icao}-${row.destination_icao}`} className="flex items-center gap-3 text-sm bg-slate-900/50 rounded-lg px-3 py-2">
+                      <span className="text-white font-mono font-semibold w-10 text-right">{row.pax_count}</span>
+                      <span className="text-slate-500 text-xs">PAX</span>
+                      <div className="flex items-center gap-1.5">
+                        <MapPin className="w-3 h-3 text-slate-500" />
+                        <span className="text-slate-300 font-mono">{row.origin_icao}</span>
+                      </div>
+                      <ArrowRight className="w-3 h-3 text-slate-600" />
+                      <div className="flex items-center gap-1.5">
+                        <Plane className="w-3 h-3 text-slate-500" />
+                        <span className={`font-mono ${
+                          row.type === 'terminating' ? 'text-emerald-400' : row.type === '1-hop' ? 'text-violet-400' : 'text-amber-400'
+                        }`}>
+                          {row.destination_icao}
                         </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-violet-500/10 text-violet-400">
-                          Connecting
-                        </span>
-                      )}
-                    </div>
-                    <div className="col-span-2">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                        r.pool.status === 'layover'
-                          ? 'bg-amber-500/10 text-amber-400'
-                          : 'bg-slate-600/30 text-slate-400'
+                      </div>
+                      <span className={`ml-auto text-[10px] px-2 py-0.5 rounded font-medium ${
+                        row.type === 'terminating'
+                          ? 'bg-emerald-500/10 text-emerald-400'
+                          : row.type === '1-hop'
+                          ? 'bg-violet-500/10 text-violet-400'
+                          : 'bg-amber-500/10 text-amber-400'
                       }`}>
-                        {r.pool.status === 'layover' ? 'Layover' : 'Waiting'}
+                        {row.type === 'terminating' ? 'FINAL' : row.type === '1-hop' ? '1-HOP' : '2-HOP'}
                       </span>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -291,9 +323,9 @@ export default function CapacityChecker({ airports, routes }: CapacityCheckerPro
           {results.length > 0 && (
             <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-4">
               <div className="flex items-center gap-2 text-xs text-slate-500">
-                <ArrowRight className="w-3 h-3" />
+                <AlertCircle className="w-3 h-3" />
                 <span>
-                  Showing passengers currently at <span className="text-white font-medium">{departure}</span> who can travel toward <span className="text-white font-medium">{arrival}</span> (direct or connecting onward)
+                  Showing total demand at <span className="text-white font-medium">{departure}</span> eligible for <span className="text-white font-medium">{arrival}</span> (includes already-booked PAX). Uses same eligibility rules as Dispatch including better-route exclusion.
                 </span>
               </div>
             </div>
