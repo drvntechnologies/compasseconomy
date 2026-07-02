@@ -124,3 +124,476 @@ body {
 :root:not(.dark) .hover\:text-white:hover {
   color: rgb(15 23 42);
 }
+
+/* ============================================
+   WINDOWS 98 RETRO THEME
+   ============================================ */
+
+.win98 {
+  --w98-bg: #008080;
+  --w98-window: #c0c0c0;
+  --w98-window-dark: #808080;
+  --w98-titlebar: #000080;
+  --w98-titlebar-text: #ffffff;
+  --w98-text: #000000;
+  --w98-text-disabled: #808080;
+  --w98-highlight: #000080;
+  --w98-highlight-text: #ffffff;
+  --w98-border-light: #ffffff;
+  --w98-border-dark: #404040;
+  --w98-border-darkest: #000000;
+  --w98-button-face: #c0c0c0;
+  --w98-field: #ffffff;
+}
+
+.win98,
+.win98 *,
+.win98 *::before,
+.win98 *::after {
+  font-family: 'Pixelated MS Sans Serif', 'MS Sans Serif', 'Tahoma', 'Arial', sans-serif !important;
+  border-radius: 0 !important;
+  letter-spacing: 0 !important;
+  text-shadow: none !important;
+  -webkit-font-smoothing: none !important;
+}
+
+.win98 body {
+  background: var(--w98-bg) !important;
+}
+
+/* Disable all backdrop blur and transitions */
+.win98 .backdrop-blur-sm,
+.win98 .backdrop-blur-md,
+.win98 .backdrop-blur-lg,
+.win98 .backdrop-blur-xl {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.win98 .transition-all,
+.win98 .transition-colors,
+.win98 .transition {
+  transition: none !important;
+}
+
+.win98 .animate-pulse {
+  animation: none !important;
+}
+
+/* Kill all rounded corners */
+.win98 [class*="rounded"] {
+  border-radius: 0 !important;
+}
+
+/* Background overrides - the teal desktop */
+.win98 .min-h-screen.bg-slate-900 {
+  background: var(--w98-bg) !important;
+}
+
+/* Sidebar = Windows taskbar style */
+.win98 aside {
+  background: var(--w98-window) !important;
+  border-right: 2px solid var(--w98-border-dark) !important;
+  border-color: var(--w98-border-dark) !important;
+  box-shadow: inset -1px -1px 0 var(--w98-border-darkest), inset 1px 1px 0 var(--w98-border-light) !important;
+}
+
+.win98 aside .border-b,
+.win98 aside .border-t {
+  border-color: var(--w98-border-dark) !important;
+}
+
+/* Logo area = title bar */
+.win98 aside > div:first-child {
+  background: var(--w98-titlebar) !important;
+  border-bottom: 2px solid var(--w98-border-dark) !important;
+}
+
+.win98 aside > div:first-child h1 {
+  color: var(--w98-titlebar-text) !important;
+  font-weight: bold !important;
+  font-size: 12px !important;
+}
+
+.win98 aside > div:first-child p {
+  color: var(--w98-titlebar-text) !important;
+  opacity: 0.8;
+}
+
+.win98 aside > div:first-child .bg-sky-500\/10 {
+  background: var(--w98-titlebar) !important;
+}
+
+.win98 aside > div:first-child svg {
+  color: var(--w98-titlebar-text) !important;
+}
+
+/* Nav buttons = Win98 buttons */
+.win98 nav button {
+  background: var(--w98-button-face) !important;
+  color: var(--w98-text) !important;
+  border: none !important;
+  box-shadow: inset 1px 1px 0 var(--w98-border-light), inset -1px -1px 0 var(--w98-border-darkest), inset 2px 2px 0 #dfdfdf, inset -2px -2px 0 var(--w98-border-dark) !important;
+  padding: 4px 8px !important;
+  margin-bottom: 2px !important;
+  font-size: 11px !important;
+}
+
+.win98 nav button:hover {
+  background: var(--w98-button-face) !important;
+  color: var(--w98-text) !important;
+}
+
+.win98 nav button:active {
+  box-shadow: inset -1px -1px 0 var(--w98-border-light), inset 1px 1px 0 var(--w98-border-darkest), inset -2px -2px 0 #dfdfdf, inset 2px 2px 0 var(--w98-border-dark) !important;
+}
+
+.win98 nav button svg {
+  color: var(--w98-text) !important;
+  width: 14px !important;
+  height: 14px !important;
+}
+
+/* Active nav item = pressed button */
+.win98 nav button.bg-sky-500\/10,
+.win98 nav button[class*="bg-sky"] {
+  box-shadow: inset -1px -1px 0 var(--w98-border-light), inset 1px 1px 0 var(--w98-border-darkest), inset -2px -2px 0 #dfdfdf, inset 2px 2px 0 var(--w98-border-dark) !important;
+  background: #dfdfdf !important;
+}
+
+.win98 nav button .text-sky-400 {
+  color: var(--w98-text) !important;
+}
+
+/* Clock area */
+.win98 aside .font-mono {
+  color: var(--w98-text) !important;
+  font-size: 11px !important;
+}
+
+.win98 aside .text-cyan-400,
+.win98 aside .text-cyan-600 {
+  color: var(--w98-text) !important;
+}
+
+.win98 aside .text-slate-300,
+.win98 aside .text-slate-400,
+.win98 aside .text-slate-500 {
+  color: var(--w98-text) !important;
+}
+
+/* Collapse / theme buttons at bottom */
+.win98 aside > div:last-child button {
+  background: var(--w98-button-face) !important;
+  color: var(--w98-text) !important;
+  box-shadow: inset 1px 1px 0 var(--w98-border-light), inset -1px -1px 0 var(--w98-border-darkest), inset 2px 2px 0 #dfdfdf, inset -2px -2px 0 var(--w98-border-dark) !important;
+  font-size: 11px !important;
+  padding: 3px 6px !important;
+}
+
+.win98 aside > div:last-child button:active {
+  box-shadow: inset -1px -1px 0 var(--w98-border-light), inset 1px 1px 0 var(--w98-border-darkest) !important;
+}
+
+.win98 aside > div:last-child svg {
+  color: var(--w98-text) !important;
+  width: 14px !important;
+  height: 14px !important;
+}
+
+/* User section */
+.win98 aside .bg-slate-700 {
+  background: var(--w98-button-face) !important;
+  border: 1px solid var(--w98-border-dark) !important;
+}
+
+.win98 aside .text-white {
+  color: var(--w98-text) !important;
+}
+
+/* Main content area = window */
+.win98 main {
+  background: var(--w98-bg) !important;
+  padding: 4px !important;
+}
+
+.win98 main > div {
+  background: var(--w98-window) !important;
+  border: 2px solid;
+  border-color: var(--w98-border-light) var(--w98-border-darkest) var(--w98-border-darkest) var(--w98-border-light) !important;
+  box-shadow: inset 1px 1px 0 #dfdfdf, inset -1px -1px 0 var(--w98-border-dark);
+  padding: 4px !important;
+}
+
+/* Content panels look like sunken fields */
+.win98 .bg-slate-800,
+.win98 .bg-slate-800\/50 {
+  background: var(--w98-field) !important;
+  border: 2px solid !important;
+  border-color: var(--w98-border-dark) var(--w98-border-light) var(--w98-border-light) var(--w98-border-dark) !important;
+  box-shadow: inset 1px 1px 0 var(--w98-border-darkest) !important;
+}
+
+.win98 .bg-slate-900\/50 {
+  background: var(--w98-field) !important;
+  border: 1px solid var(--w98-border-dark) !important;
+}
+
+/* Card-like containers */
+.win98 .bg-slate-700,
+.win98 .bg-slate-700\/50,
+.win98 .bg-slate-700\/20 {
+  background: var(--w98-window) !important;
+  border: 1px solid var(--w98-border-dark) !important;
+}
+
+/* Text colors */
+.win98 .text-white,
+.win98 .text-slate-300 {
+  color: var(--w98-text) !important;
+}
+
+.win98 .text-slate-400,
+.win98 .text-slate-500 {
+  color: var(--w98-text-disabled) !important;
+}
+
+.win98 .text-sky-400,
+.win98 .text-sky-300 {
+  color: var(--w98-highlight) !important;
+}
+
+.win98 .text-emerald-400,
+.win98 .text-emerald-300 {
+  color: #008000 !important;
+}
+
+.win98 .text-red-400,
+.win98 .text-red-300 {
+  color: #ff0000 !important;
+}
+
+.win98 .text-amber-400,
+.win98 .text-amber-300,
+.win98 .text-yellow-400 {
+  color: #808000 !important;
+}
+
+.win98 .text-violet-400 {
+  color: #800080 !important;
+}
+
+.win98 .text-cyan-400 {
+  color: #008080 !important;
+}
+
+/* Buttons throughout */
+.win98 button:not(nav button) {
+  background: var(--w98-button-face) !important;
+  color: var(--w98-text) !important;
+  border: none !important;
+  box-shadow: inset 1px 1px 0 var(--w98-border-light), inset -1px -1px 0 var(--w98-border-darkest), inset 2px 2px 0 #dfdfdf, inset -2px -2px 0 var(--w98-border-dark) !important;
+  font-size: 11px !important;
+  padding: 4px 12px !important;
+}
+
+.win98 button:not(nav button):hover {
+  background: var(--w98-button-face) !important;
+}
+
+.win98 button:not(nav button):active {
+  box-shadow: inset -1px -1px 0 var(--w98-border-light), inset 1px 1px 0 var(--w98-border-darkest), inset -2px -2px 0 #dfdfdf, inset 2px 2px 0 var(--w98-border-dark) !important;
+  padding: 5px 11px 3px 13px !important;
+}
+
+/* Sky/blue action buttons */
+.win98 .bg-sky-500,
+.win98 .bg-sky-600,
+.win98 .bg-sky-500\/10 {
+  background: var(--w98-button-face) !important;
+  color: var(--w98-text) !important;
+}
+
+/* Emerald/green action buttons */
+.win98 .bg-emerald-500,
+.win98 .bg-emerald-600,
+.win98 .bg-emerald-500\/10 {
+  background: var(--w98-button-face) !important;
+  color: #008000 !important;
+}
+
+/* Red / destructive buttons */
+.win98 .bg-red-500,
+.win98 .bg-red-600,
+.win98 .bg-red-500\/10 {
+  background: var(--w98-button-face) !important;
+  color: #ff0000 !important;
+}
+
+/* Inputs & selects */
+.win98 input,
+.win98 select,
+.win98 textarea {
+  background: var(--w98-field) !important;
+  color: var(--w98-text) !important;
+  border: 2px solid !important;
+  border-color: var(--w98-border-dark) var(--w98-border-light) var(--w98-border-light) var(--w98-border-dark) !important;
+  box-shadow: inset 1px 1px 0 var(--w98-border-darkest) !important;
+  font-size: 11px !important;
+  padding: 3px 4px !important;
+  outline: none !important;
+}
+
+.win98 input:focus,
+.win98 select:focus,
+.win98 textarea:focus {
+  outline: none !important;
+  ring: none !important;
+  box-shadow: inset 1px 1px 0 var(--w98-border-darkest) !important;
+}
+
+/* Tables */
+.win98 table {
+  border: 2px solid !important;
+  border-color: var(--w98-border-dark) var(--w98-border-light) var(--w98-border-light) var(--w98-border-dark) !important;
+  background: var(--w98-field) !important;
+}
+
+.win98 th {
+  background: var(--w98-button-face) !important;
+  color: var(--w98-text) !important;
+  border: 1px solid !important;
+  border-color: var(--w98-border-light) var(--w98-border-dark) var(--w98-border-dark) var(--w98-border-light) !important;
+  font-size: 11px !important;
+  font-weight: bold !important;
+  padding: 2px 6px !important;
+}
+
+.win98 td {
+  color: var(--w98-text) !important;
+  border: 1px solid #c0c0c0 !important;
+  font-size: 11px !important;
+  padding: 2px 6px !important;
+}
+
+/* Borders */
+.win98 .border-slate-700,
+.win98 .border-slate-700\/50,
+.win98 .border-slate-600 {
+  border-color: var(--w98-border-dark) !important;
+}
+
+/* Dividers */
+.win98 .divide-slate-700\/50 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--w98-border-dark) !important;
+}
+
+/* Headers / h-tags */
+.win98 h1, .win98 h2, .win98 h3, .win98 h4 {
+  color: var(--w98-text) !important;
+  font-size: 12px !important;
+  font-weight: bold !important;
+}
+
+.win98 h1 {
+  font-size: 14px !important;
+}
+
+/* Status indicators */
+.win98 .bg-emerald-500 {
+  background: #008000 !important;
+}
+
+.win98 .bg-red-500 {
+  background: #ff0000 !important;
+}
+
+.win98 .bg-amber-500 {
+  background: #ffff00 !important;
+}
+
+/* Badges and chips */
+.win98 [class*="bg-sky-500\/10"],
+.win98 [class*="bg-emerald-500\/10"],
+.win98 [class*="bg-violet-500\/10"],
+.win98 [class*="bg-amber-500\/10"],
+.win98 [class*="bg-red-500\/10"],
+.win98 [class*="bg-cyan-500\/10"] {
+  background: var(--w98-window) !important;
+  border: 1px solid var(--w98-border-dark) !important;
+  padding: 1px 4px !important;
+}
+
+/* Scrollbars */
+.win98 ::-webkit-scrollbar {
+  width: 16px;
+  height: 16px;
+}
+
+.win98 ::-webkit-scrollbar-track {
+  background: repeating-conic-gradient(var(--w98-window) 0% 25%, var(--w98-field) 0% 50%) 50%/2px 2px;
+}
+
+.win98 ::-webkit-scrollbar-thumb {
+  background: var(--w98-button-face);
+  border: none;
+  box-shadow: inset 1px 1px 0 var(--w98-border-light), inset -1px -1px 0 var(--w98-border-darkest), inset 2px 2px 0 #dfdfdf, inset -2px -2px 0 var(--w98-border-dark);
+}
+
+.win98 ::-webkit-scrollbar-button {
+  background: var(--w98-button-face);
+  border: none;
+  box-shadow: inset 1px 1px 0 var(--w98-border-light), inset -1px -1px 0 var(--w98-border-darkest);
+  display: block;
+  height: 16px;
+  width: 16px;
+}
+
+/* Modals */
+.win98 .fixed.inset-0 .bg-slate-800 {
+  background: var(--w98-window) !important;
+  border: 2px solid !important;
+  border-color: var(--w98-border-light) var(--w98-border-darkest) var(--w98-border-darkest) var(--w98-border-light) !important;
+}
+
+.win98 .bg-black\/60 {
+  background: rgba(0, 128, 128, 0.6) !important;
+  backdrop-filter: none !important;
+}
+
+/* Override all shadows to none */
+.win98 .shadow-lg,
+.win98 .shadow-xl,
+.win98 .shadow-2xl,
+.win98 .shadow-md {
+  box-shadow: inset 1px 1px 0 var(--w98-border-light), inset -1px -1px 0 var(--w98-border-darkest) !important;
+}
+
+/* All font sizes capped */
+.win98 .text-xs { font-size: 11px !important; }
+.win98 .text-sm { font-size: 11px !important; }
+.win98 .text-base { font-size: 12px !important; }
+.win98 .text-lg { font-size: 13px !important; }
+.win98 .text-xl { font-size: 14px !important; }
+.win98 .text-2xl { font-size: 14px !important; }
+.win98 .text-3xl { font-size: 16px !important; }
+.win98 .text-\[10px\] { font-size: 10px !important; }
+
+/* Grid/flex gaps tightened */
+.win98 .gap-6 { gap: 8px !important; }
+.win98 .gap-4 { gap: 6px !important; }
+.win98 .gap-3 { gap: 4px !important; }
+
+/* Padding reduced */
+.win98 .p-6 { padding: 8px !important; }
+.win98 .p-5 { padding: 6px !important; }
+.win98 .p-4 { padding: 6px !important; }
+.win98 .px-6 { padding-left: 8px !important; padding-right: 8px !important; }
+.win98 .py-8 { padding-top: 8px !important; padding-bottom: 8px !important; }
+
+/* Win98 focus ring override */
+.win98 *:focus {
+  outline: 1px dotted var(--w98-text) !important;
+  outline-offset: -1px !important;
+  box-shadow: inset 1px 1px 0 var(--w98-border-darkest) !important;
+}
