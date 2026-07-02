@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Aircraft, Airport, Gate, SizeCategory } from '../lib/types';
 import { AIRCRAFT_SIZE_MAP } from '../lib/types';
-import { Plane, Plus, Trash2, Filter, Wrench, CheckCircle, AlertCircle } from 'lucide-react';
+import { Plane, Plus, Trash2, Filter, Wrench, CheckCircle, AlertCircle, DoorOpen, X } from 'lucide-react';
 
 interface FleetProps {
   airports: Airport[];
@@ -45,6 +45,11 @@ export default function Fleet({ airports, isAdmin }: FleetProps) {
   const [submitting, setSubmitting] = useState(false);
   const [availableGates, setAvailableGates] = useState<Gate[]>([]);
 
+  const [gateAssignAircraftId, setGateAssignAircraftId] = useState<string | null>(null);
+  const [gatePickerOptions, setGatePickerOptions] = useState<Gate[]>([]);
+  const [gatePickerLoading, setGatePickerLoading] = useState(false);
+  const [aircraftGates, setAircraftGates] = useState<Record<string, Gate | null>>({});
+
   const airportCodes = useMemo(() => airports.map(a => a.icao_code).sort(), [airports]);
   const aircraftTypes = useMemo(() => [...new Set(aircraft.map(a => a.aircraft_type))].sort(), [aircraft]);
 
@@ -58,7 +63,10 @@ export default function Fleet({ airports, isAdmin }: FleetProps) {
       .from('aircraft')
       .select('*')
       .order('tail_number', { ascending: true });
-    if (data) setAircraft(data);
+    if (data) {
+      setAircraft(data);
+      fetchAircraftGates(data);
+    }
     setLoading(false);
   }
 
@@ -71,6 +79,68 @@ export default function Fleet({ airports, isAdmin }: FleetProps) {
       .eq('status', 'open')
       .order('gate_number', { ascending: true });
     setAvailableGates(data || []);
+  }
+
+  async function fetchAircraftGates(aircraftList: Aircraft[]) {
+    const ids = aircraftList.map(a => a.id);
+    if (ids.length === 0) return;
+    const { data } = await supabase
+      .from('gates')
+      .select('*')
+      .in('assigned_aircraft_id', ids);
+    const map: Record<string, Gate | null> = {};
+    if (data) {
+      for (const g of data) {
+        if (g.assigned_aircraft_id) map[g.assigned_aircraft_id] = g;
+      }
+    }
+    setAircraftGates(map);
+  }
+
+  async function openGatePicker(ac: Aircraft) {
+    setGateAssignAircraftId(ac.id);
+    setGatePickerLoading(true);
+    const { data } = await supabase
+      .from('gates')
+      .select('*')
+      .eq('airport_icao', ac.current_airport_icao)
+      .eq('status', 'open')
+      .order('gate_number', { ascending: true });
+    setGatePickerOptions(data || []);
+    setGatePickerLoading(false);
+  }
+
+  async function assignGateToAircraft(aircraftId: string, gateId: string) {
+    // First unassign any current gate for this aircraft
+    const currentGate = aircraftGates[aircraftId];
+    if (currentGate) {
+      await supabase.from('gates').update({
+        status: 'open',
+        assigned_aircraft_id: null,
+        occupied_since: null,
+      }).eq('id', currentGate.id);
+    }
+    // Assign the new gate
+    await supabase.from('gates').update({
+      status: 'occupied',
+      assigned_aircraft_id: aircraftId,
+      occupied_since: new Date().toISOString(),
+    }).eq('id', gateId);
+    setGateAssignAircraftId(null);
+    fetchAircraft();
+  }
+
+  async function unassignGate(aircraftId: string) {
+    const currentGate = aircraftGates[aircraftId];
+    if (currentGate) {
+      await supabase.from('gates').update({
+        status: 'open',
+        assigned_aircraft_id: null,
+        occupied_since: null,
+      }).eq('id', currentGate.id);
+    }
+    setGateAssignAircraftId(null);
+    fetchAircraft();
   }
 
   async function addAircraft(e: React.FormEvent) {
@@ -310,6 +380,7 @@ export default function Fleet({ airports, isAdmin }: FleetProps) {
                   <th className="px-4 py-3 text-left text-slate-400 font-medium">Size</th>
                   <th className="px-4 py-3 text-left text-slate-400 font-medium">Max PAX</th>
                   <th className="px-4 py-3 text-left text-slate-400 font-medium">Location</th>
+                  <th className="px-4 py-3 text-left text-slate-400 font-medium">Gate</th>
                   <th className="px-4 py-3 text-left text-slate-400 font-medium">Status</th>
                   {isAdmin && <th className="px-4 py-3 text-right text-slate-400 font-medium">$/hr</th>}
                   {isAdmin && <th className="px-4 py-3 text-right text-slate-400 font-medium">Lease/mo</th>}
@@ -330,6 +401,65 @@ export default function Fleet({ airports, isAdmin }: FleetProps) {
                       </td>
                       <td className="px-4 py-3 text-slate-300">{ac.max_pax}</td>
                       <td className="px-4 py-3 text-white font-mono">{ac.current_airport_icao}</td>
+                      <td className="px-4 py-3 relative">
+                        {gateAssignAircraftId === ac.id ? (
+                          <div className="flex items-center gap-1">
+                            {gatePickerLoading ? (
+                              <span className="text-xs text-slate-500">Loading...</span>
+                            ) : gatePickerOptions.length === 0 ? (
+                              <span className="text-xs text-slate-500">No open gates</span>
+                            ) : (
+                              <select
+                                autoFocus
+                                onChange={e => {
+                                  if (e.target.value) assignGateToAircraft(ac.id, e.target.value);
+                                }}
+                                className="px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-xs focus:ring-2 focus:ring-sky-500/40"
+                              >
+                                <option value="">Select gate...</option>
+                                {gatePickerOptions.map(g => (
+                                  <option key={g.id} value={g.id}>{g.gate_number} ({g.gate_type})</option>
+                                ))}
+                              </select>
+                            )}
+                            <button
+                              onClick={() => setGateAssignAircraftId(null)}
+                              className="p-0.5 text-slate-400 hover:text-white"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : aircraftGates[ac.id] ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                              {aircraftGates[ac.id]!.gate_number}
+                            </span>
+                            {isAdmin && (
+                              <button
+                                onClick={() => unassignGate(ac.id)}
+                                className="p-0.5 text-slate-500 hover:text-red-400 transition-colors"
+                                title="Unassign gate"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          isAdmin ? (
+                            <button
+                              onClick={() => openGatePicker(ac)}
+                              disabled={ac.status === 'in_flight'}
+                              className="flex items-center gap-1 text-xs text-slate-500 hover:text-sky-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                              title="Assign gate"
+                            >
+                              <DoorOpen className="w-3.5 h-3.5" />
+                              <span>Assign</span>
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-600">--</span>
+                          )
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${statusStyle.bg} ${statusStyle.text}`}>
                           {ac.status === 'available' && <CheckCircle className="w-3 h-3" />}
