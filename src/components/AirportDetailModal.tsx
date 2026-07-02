@@ -260,15 +260,25 @@ export default function AirportDetailModal({ airport, airports, routes, paxPools
               <p className="text-[10px] text-slate-500 mb-2">Layover PAX at {icao} by final destination</p>
               <div className="space-y-1.5 max-h-56 overflow-y-auto">
                 {sortedConnecting.map(([dest, count]) => {
-                  const hasRoute = activeRoutes.some(r => r.departure_icao === icao && r.arrival_icao === dest);
+                  const hasDirect = activeRoutes.some(r => r.departure_icao === icao && r.arrival_icao === dest);
+                  const viaHub = !hasDirect
+                    ? routes.find(r =>
+                        r.is_active &&
+                        r.departure_icao === icao &&
+                        routes.some(r2 => r2.is_active && r2.departure_icao === r.arrival_icao && r2.arrival_icao === dest)
+                      )
+                    : null;
                   const pctOfMax = (count / maxPax) * 100;
                   return (
                     <div key={dest} className="relative flex items-center justify-between text-xs p-2 rounded-lg bg-slate-900/60">
                       <div className="absolute inset-0 bg-rose-400/5 rounded-lg" style={{ width: `${pctOfMax}%` }} />
                       <div className="relative flex items-center gap-2">
                         <span className="text-white font-mono font-medium">{dest}</span>
-                        {hasRoute && <span className="text-emerald-400 text-[10px] font-bold">DIRECT</span>}
-                        {!hasRoute && <span className="text-amber-400 text-[10px] font-bold">NO ROUTE</span>}
+                        {hasDirect && <span className="text-emerald-400 text-[10px] font-bold">DIRECT</span>}
+                        {!hasDirect && viaHub && (
+                          <span className="text-sky-400 text-[10px] font-bold">VIA {viaHub.arrival_icao}</span>
+                        )}
+                        {!hasDirect && !viaHub && <span className="text-red-400 text-[10px] font-bold">NO ROUTE</span>}
                       </div>
                       <span className="relative text-white font-semibold">{count}</span>
                     </div>
