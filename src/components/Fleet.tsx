@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
-import type { Aircraft, Airport, SizeCategory } from '../lib/types';
+import type { Aircraft, Airport, Gate, SizeCategory } from '../lib/types';
 import { AIRCRAFT_SIZE_MAP } from '../lib/types';
 import { Plane, Plus, Trash2, Filter, Wrench, CheckCircle, AlertCircle } from 'lucide-react';
 
@@ -39,9 +39,11 @@ export default function Fleet({ airports, isAdmin }: FleetProps) {
     current_airport_icao: '',
     hourly_cost_usd: '',
     monthly_lease_usd: '',
+    assigned_gate_id: '',
   });
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [availableGates, setAvailableGates] = useState<Gate[]>([]);
 
   const airportCodes = useMemo(() => airports.map(a => a.icao_code).sort(), [airports]);
   const aircraftTypes = useMemo(() => [...new Set(aircraft.map(a => a.aircraft_type))].sort(), [aircraft]);
@@ -60,6 +62,17 @@ export default function Fleet({ airports, isAdmin }: FleetProps) {
     setLoading(false);
   }
 
+  async function fetchGatesForAirport(icao: string) {
+    if (!icao) { setAvailableGates([]); return; }
+    const { data } = await supabase
+      .from('gates')
+      .select('*')
+      .eq('airport_icao', icao)
+      .eq('status', 'open')
+      .order('gate_number', { ascending: true });
+    setAvailableGates(data || []);
+  }
+
   async function addAircraft(e: React.FormEvent) {
     e.preventDefault();
     setFormError('');
@@ -68,7 +81,7 @@ export default function Fleet({ airports, isAdmin }: FleetProps) {
       return;
     }
     setSubmitting(true);
-    const { error } = await supabase.from('aircraft').insert({
+    const { data: inserted, error } = await supabase.from('aircraft').insert({
       tail_number: newAircraft.tail_number.toUpperCase().trim(),
       aircraft_type: newAircraft.aircraft_type.trim(),
       size_category: newAircraft.size_category,
@@ -77,11 +90,19 @@ export default function Fleet({ airports, isAdmin }: FleetProps) {
       status: 'available',
       hourly_cost_usd: newAircraft.hourly_cost_usd ? parseFloat(newAircraft.hourly_cost_usd) : 0,
       monthly_lease_usd: newAircraft.monthly_lease_usd ? parseFloat(newAircraft.monthly_lease_usd) : 0,
-    });
+    }).select().single();
     if (error) {
       setFormError(error.message);
     } else {
-      setNewAircraft({ tail_number: '', aircraft_type: '', size_category: 'medium', max_pax: 0, current_airport_icao: '', hourly_cost_usd: '', monthly_lease_usd: '' });
+      if (newAircraft.assigned_gate_id && inserted) {
+        await supabase.from('gates').update({
+          status: 'occupied',
+          assigned_aircraft_id: inserted.id,
+          occupied_since: new Date().toISOString(),
+        }).eq('id', newAircraft.assigned_gate_id);
+      }
+      setNewAircraft({ tail_number: '', aircraft_type: '', size_category: 'medium', max_pax: 0, current_airport_icao: '', hourly_cost_usd: '', monthly_lease_usd: '', assigned_gate_id: '' });
+      setAvailableGates([]);
       setShowAddForm(false);
       fetchAircraft();
     }
@@ -216,11 +237,24 @@ export default function Fleet({ airports, isAdmin }: FleetProps) {
             />
             <select
               value={newAircraft.current_airport_icao}
-              onChange={e => setNewAircraft({ ...newAircraft, current_airport_icao: e.target.value })}
+              onChange={e => {
+                const icao = e.target.value;
+                setNewAircraft({ ...newAircraft, current_airport_icao: icao, assigned_gate_id: '' });
+                fetchGatesForAirport(icao);
+              }}
               className="px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-sky-500/40"
             >
               <option value="">Location...</option>
               {airportCodes.map(code => <option key={code} value={code}>{code}</option>)}
+            </select>
+            <select
+              value={newAircraft.assigned_gate_id}
+              onChange={e => setNewAircraft({ ...newAircraft, assigned_gate_id: e.target.value })}
+              disabled={!newAircraft.current_airport_icao || availableGates.length === 0}
+              className="px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-sky-500/40 disabled:opacity-40"
+            >
+              <option value="">Gate (optional)</option>
+              {availableGates.map(g => <option key={g.id} value={g.id}>{g.gate_number} ({g.gate_type})</option>)}
             </select>
             <input
               type="number"
