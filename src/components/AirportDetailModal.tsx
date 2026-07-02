@@ -140,6 +140,17 @@ export default function AirportDetailModal({ airport, airports, routes, paxPools
   const layoverHere = paxPools.filter(p => p.current_airport_icao === icao && p.status === 'layover')
     .reduce((s, p) => s + p.pax_count, 0);
 
+  // Connecting pax currently AT this airport (on layover) grouped by final destination
+  const connectingHerePools = paxPools.filter(
+    p => p.current_airport_icao === icao && p.status === 'layover' && p.destination_icao !== icao
+  );
+  const connectingByDest = connectingHerePools.reduce<Record<string, number>>((acc, p) => {
+    acc[p.destination_icao] = (acc[p.destination_icao] || 0) + p.pax_count;
+    return acc;
+  }, {});
+  const sortedConnecting = Object.entries(connectingByDest).sort(([, a], [, b]) => b - a);
+  const totalConnecting = connectingHerePools.reduce((s, p) => s + p.pax_count, 0);
+
   const activeRoutes = routes.filter(r => (r.departure_icao === icao || r.arrival_icao === icao) && r.is_active);
 
   const sortedOutbound = Object.entries(outboundByDest).sort(([, a], [, b]) => b - a);
@@ -175,9 +186,10 @@ export default function AirportDetailModal({ airport, airports, routes, paxPools
 
         <div className="flex-1 overflow-y-auto p-6">
           {/* Stats */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
             <StatCard icon={<Users className="w-4 h-4" />} label="Waiting" value={totalOutbound - layoverHere} color="text-amber-400" />
             <StatCard icon={<Plane className="w-4 h-4" />} label="On Layover" value={layoverHere} color="text-sky-400" />
+            <StatCard icon={<RefreshCw className="w-4 h-4" />} label="Connecting" value={totalConnecting} color="text-rose-400" />
             <StatCard icon={<MapPin className="w-4 h-4" />} label="Arrived" value={arrivedHere} color="text-emerald-400" />
             <StatCard icon={<ArrowRight className="w-4 h-4" />} label="Inbound" value={totalInbound} color="text-cyan-400" />
             <StatCard icon={<RefreshCw className="w-4 h-4" />} label="Transit" value={totalTransit} color="text-violet-400" />
@@ -213,7 +225,7 @@ export default function AirportDetailModal({ airport, airports, routes, paxPools
           </div>
 
           {/* Data Tables */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
             {/* Outbound */}
             <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4">
               <h3 className="text-sm font-semibold text-amber-400 mb-3 uppercase tracking-wide flex items-center gap-2">
@@ -236,6 +248,33 @@ export default function AirportDetailModal({ airport, airports, routes, paxPools
                   );
                 })}
                 {sortedOutbound.length === 0 && <p className="text-slate-500 text-xs">No outbound demand</p>}
+              </div>
+            </div>
+
+            {/* Connecting Here - pax on layover needing onward flights */}
+            <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4">
+              <h3 className="text-sm font-semibold text-rose-400 mb-3 uppercase tracking-wide flex items-center gap-2">
+                <RefreshCw className="w-4 h-4" />
+                Connecting Here ({totalConnecting} PAX)
+              </h3>
+              <p className="text-[10px] text-slate-500 mb-2">Layover PAX at {icao} by final destination</p>
+              <div className="space-y-1.5 max-h-56 overflow-y-auto">
+                {sortedConnecting.map(([dest, count]) => {
+                  const hasRoute = activeRoutes.some(r => r.departure_icao === icao && r.arrival_icao === dest);
+                  const pctOfMax = (count / maxPax) * 100;
+                  return (
+                    <div key={dest} className="relative flex items-center justify-between text-xs p-2 rounded-lg bg-slate-900/60">
+                      <div className="absolute inset-0 bg-rose-400/5 rounded-lg" style={{ width: `${pctOfMax}%` }} />
+                      <div className="relative flex items-center gap-2">
+                        <span className="text-white font-mono font-medium">{dest}</span>
+                        {hasRoute && <span className="text-emerald-400 text-[10px] font-bold">DIRECT</span>}
+                        {!hasRoute && <span className="text-amber-400 text-[10px] font-bold">NO ROUTE</span>}
+                      </div>
+                      <span className="relative text-white font-semibold">{count}</span>
+                    </div>
+                  );
+                })}
+                {sortedConnecting.length === 0 && <p className="text-slate-500 text-xs">No connecting pax on layover</p>}
               </div>
             </div>
 
