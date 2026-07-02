@@ -246,7 +246,7 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
     const activeRoutes = routes.filter(r => r.is_active);
     const destsFromArrival = new Set(activeRoutes.filter(r => r.departure_icao === arrivalIcao).map(r => r.arrival_icao));
 
-    // Build 2-hop reachability: destinations reachable from arrival within 2 hops (via any intermediate)
+    // 2-hop reachability from arrival (arrival -> intermediate -> destination)
     const destsFromArrival2Hop = new Set<string>();
     destsFromArrival.forEach(intermediate => {
       activeRoutes.filter(r => r.departure_icao === intermediate).forEach(r => {
@@ -254,31 +254,41 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
       });
     });
 
+    // 1-hop reachability via OTHER routes from this departure airport
+    // Prevents boarding passengers when a shorter path exists via a different flight
+    const otherIntermediates = activeRoutes
+      .filter(r => r.departure_icao === departureIcao && r.arrival_icao !== arrivalIcao)
+      .map(r => r.arrival_icao);
+    const destsViaOtherRoutes1Hop = new Set<string>();
+    otherIntermediates.forEach(intermediate => {
+      activeRoutes.filter(r => r.departure_icao === intermediate).forEach(r => {
+        destsViaOtherRoutes1Hop.add(r.arrival_icao);
+      });
+    });
+
     const availablePools = allEligible
       .filter(p => {
         if (p.destination_icao === arrivalIcao) return true;
         if (p.connections_remaining > 0) {
-          // Direct 1-hop: arrival has a route to destination
           if (destsFromArrival.has(p.destination_icao)) return true;
-          // 2-hop: passenger has 2+ connections and can reach via intermediate from arrival
-          if (p.connections_remaining > 1 && destsFromArrival2Hop.has(p.destination_icao)) return true;
+          if (p.connections_remaining > 1 && destsFromArrival2Hop.has(p.destination_icao)) {
+            // Don't board if a 1-hop path exists via another route from this airport
+            if (destsViaOtherRoutes1Hop.has(p.destination_icao)) return false;
+            return true;
+          }
         }
         return false;
       })
       .sort((a, b) => {
-        // Priority 1: Terminating passengers (destination IS the arrival)
         const aTerminating = a.destination_icao === arrivalIcao ? 0 : 1;
         const bTerminating = b.destination_icao === arrivalIcao ? 0 : 1;
         if (aTerminating !== bTerminating) return aTerminating - bTerminating;
-        // Priority 2: 1-hop reachable from arrival (direct next leg) over 2-hop
         const aDirectReach = destsFromArrival.has(a.destination_icao) ? 0 : 1;
         const bDirectReach = destsFromArrival.has(b.destination_icao) ? 0 : 1;
         if (aDirectReach !== bDirectReach) return aDirectReach - bDirectReach;
-        // Priority 3: Layover passengers get slight priority (they've been waiting longer)
         const aIsLayover = a.status === 'layover' ? 0 : 1;
         const bIsLayover = b.status === 'layover' ? 0 : 1;
         if (aIsLayover !== bIsLayover) return aIsLayover - bIsLayover;
-        // Priority 4: Fewer connections remaining = closer to destination = board first
         return a.connections_remaining - b.connections_remaining;
       });
 

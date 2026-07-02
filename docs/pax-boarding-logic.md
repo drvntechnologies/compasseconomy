@@ -65,9 +65,17 @@ Result: NOT eligible. Does not board.
 
 ### 2-Hop Example: TPA -> IAD (valid case)
 
-Passenger pool: 10 PAX at KTPA wanting KMSY with `connections_remaining = 2`.  
-IAD -> ATL -> KMSY is a valid 2-hop path.  
-Result: Eligible (2-hop reachable with 2 connections remaining). Boards the flight.
+Passenger pool: 10 PAX at KTPA wanting KLAS with `connections_remaining = 2`.  
+IAD -> KLAS is NOT a direct route. But IAD -> ??? -> KLAS is a valid 2-hop path.  
+No other route from TPA reaches KLAS in 1-hop (ATL doesn't serve KLAS either).  
+Result: Eligible (2-hop reachable, no better alternative from TPA). Boards the flight.
+
+### Better Route Exclusion: TPA -> IAD (blocked)
+
+Passenger pool: 22 PAX at KTPA wanting SPJC with `connections_remaining = 2`.  
+IAD -> ATL -> SPJC is a valid 2-hop from IAD.  
+BUT: TPA -> ATL -> SPJC is a 1-hop path via another route from TPA.  
+Result: NOT eligible on the IAD flight. Should wait for TPA -> ATL flight instead.
 
 ## Key Design Decisions
 
@@ -75,3 +83,4 @@ Result: Eligible (2-hop reachable with 2 connections remaining). Boards the flig
 2. **No hub magic**: Hub airports get no special treatment beyond the routes they actually serve.
 3. **Terminating passengers always win**: If the plane is going to IAD, people who need IAD fill first. Connecting passengers get remaining seats.
 4. **Conservative on multi-hop**: We only allow 2-hop lookahead. A passenger needing 3+ hops to reach their destination from the arrival airport is NOT eligible, even if a theoretical path exists. This prevents sending people on wild goose chases.
+5. **Better route exclusion**: If a passenger can reach their destination in fewer hops via a different flight from the same departure airport, they are NOT eligible for this flight. Don't steal passengers from more efficient paths.
