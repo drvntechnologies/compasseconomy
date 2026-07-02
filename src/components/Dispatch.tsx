@@ -247,7 +247,9 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
 
     const availablePools = allEligible
       .filter(p =>
-        p.destination_icao === arrivalIcao || (p.connections_remaining > 0 && arrivalIsHub)
+        p.destination_icao === arrivalIcao ||
+        (p.connections_remaining > 0 && arrivalIsHub) ||
+        (p.status === 'layover' && p.destination_icao !== arrivalIcao)
       )
       .sort((a, b) => {
         const aIsLayover = a.status === 'layover' ? 0 : 1;
