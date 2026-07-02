@@ -655,7 +655,7 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
       </div>
 
       {/* Book a Flight */}
-      <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+      <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 sm:p-6">
         <div className="flex items-center gap-3 mb-5">
           <div className="w-9 h-9 bg-sky-500/10 rounded-lg flex items-center justify-center">
             <Plane className="w-5 h-5 text-sky-400" />
@@ -778,7 +778,7 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
 
       {/* Active Flights (In Transit) */}
       <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-700 flex items-center gap-3">
+        <div className="px-4 sm:px-6 py-4 border-b border-slate-700 flex items-center gap-3">
           <div className="w-8 h-8 bg-amber-500/10 rounded-lg flex items-center justify-center">
             <Radio className="w-4 h-4 text-amber-400" />
           </div>
@@ -817,12 +817,12 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
               const assignedGate = gateAssignments[booking.id];
 
               return (
-                <div key={booking.id} className="p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
+                <div key={booking.id} className="p-4 sm:p-5">
+                  <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                    <div className="flex-1 min-w-0">
                       {/* Flight header */}
-                      <div className="flex items-center gap-3 mb-3 flex-wrap">
-                        <span className="text-white font-bold text-lg font-mono">
+                      <div className="flex items-center gap-2 sm:gap-3 mb-3 flex-wrap">
+                        <span className="text-white font-bold text-base sm:text-lg font-mono">
                           CPZ{booking.flight_number}
                         </span>
                         <div className="flex items-center gap-1.5 text-slate-300 text-sm">
@@ -833,7 +833,7 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
                         <div className="flex items-center gap-1 text-xs text-slate-400">
                           <Clock className="w-3 h-3" />
                           <span>DEP {formatUtcTime(booking.departure_time_utc)}</span>
-                          <span className="text-slate-600 ml-1">{formatUtcDate(booking.departure_time_utc)}</span>
+                          <span className="text-slate-600 ml-1 hidden sm:inline">{formatUtcDate(booking.departure_time_utc)}</span>
                         </div>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                           booking.user_id === currentUserId
@@ -863,7 +863,7 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
                       </div>
 
                       {/* PAX summary */}
-                      <div className="flex items-center gap-4 text-sm">
+                      <div className="flex items-center gap-3 sm:gap-4 text-sm flex-wrap">
                         <div className="flex items-center gap-1.5">
                           <Users className="w-3.5 h-3.5 text-sky-400" />
                           <span className="text-white font-semibold">{booking.pax_count}</span>
@@ -922,7 +922,7 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
 
                     {/* Actions - only show to booking owner */}
                     {currentUserId && booking.user_id === currentUserId && (
-                    <div className="flex flex-col gap-2 shrink-0">
+                    <div className="flex flex-row lg:flex-col gap-2 shrink-0 flex-wrap">
                       {!assignedGate && (
                         <button
                           onClick={() => requestGate(booking.id)}

@@ -10,7 +10,7 @@ import Dispatch from './components/Dispatch';
 import Fleet from './components/Fleet';
 import Gates from './components/Gates';
 import Finances from './components/Finances';
-import { Plane, LogOut, LayoutDashboard, Settings, Users, Navigation, Clock, Gauge, Radio, PanelLeftClose, PanelLeft, DoorOpen, DollarSign, KeyRound, Sun, Moon, Monitor } from 'lucide-react';
+import { Plane, LogOut, LayoutDashboard, Settings, Users, Navigation, Clock, Gauge, Radio, PanelLeftClose, PanelLeft, DoorOpen, DollarSign, KeyRound, Sun, Moon, Monitor, Menu, X } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 
 export default function App() {
@@ -22,6 +22,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(new Date());
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showPasswordReset, setShowPasswordReset] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [resetError, setResetError] = useState('');
@@ -158,21 +159,51 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-900 flex">
+      {/* Mobile header bar */}
+      <div className="fixed top-0 left-0 right-0 z-40 h-14 bg-slate-800 border-b border-slate-700 flex items-center px-4 lg:hidden">
+        <button
+          onClick={() => setMobileMenuOpen(true)}
+          className="p-2 text-slate-400 hover:text-white rounded-lg"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+        <div className="flex items-center gap-2 ml-3">
+          <Plane className="w-4 h-4 text-sky-400" />
+          <span className="text-white font-semibold text-sm">Compass Atlantic</span>
+        </div>
+        <span className="ml-auto text-xs text-cyan-400 font-mono">{utcTime.slice(0, 5)}Z</span>
+      </div>
+
+      {/* Mobile overlay backdrop */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 lg:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-50 flex flex-col bg-slate-800 border-r border-slate-700 transition-all duration-300 ${
         sidebarCollapsed ? 'w-[68px]' : 'w-60'
-      }`}>
+      } ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
         {/* Logo area */}
         <div className="flex items-center gap-3 px-4 h-16 border-b border-slate-700 shrink-0">
           <div className="w-9 h-9 bg-sky-500/10 rounded-lg flex items-center justify-center shrink-0">
             <Plane className="w-5 h-5 text-sky-400" />
           </div>
           {!sidebarCollapsed && (
-            <div className="overflow-hidden">
+            <div className="overflow-hidden flex-1">
               <h1 className="text-white font-bold text-sm leading-tight whitespace-nowrap">Compass Atlantic</h1>
               <p className="text-slate-500 text-[10px]">PAX Demand System</p>
             </div>
           )}
+          {/* Mobile close button */}
+          <button
+            onClick={() => setMobileMenuOpen(false)}
+            className="p-1.5 text-slate-400 hover:text-white rounded-lg lg:hidden"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Navigation */}
@@ -183,7 +214,7 @@ export default function App() {
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveView(item.id)}
+                onClick={() => { setActiveView(item.id); setMobileMenuOpen(false); }}
                 title={sidebarCollapsed ? item.label : undefined}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
                   isActive
@@ -283,7 +314,7 @@ export default function App() {
           </button>
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-all ml-auto shrink-0"
+            className="hidden lg:flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-all ml-auto shrink-0"
           >
             {sidebarCollapsed ? (
               <PanelLeft className="w-4 h-4" />
@@ -298,10 +329,10 @@ export default function App() {
       </aside>
 
       {/* Main content */}
-      <main className={`flex-1 transition-all duration-300 ${
-        sidebarCollapsed ? 'ml-[68px]' : 'ml-60'
+      <main className={`flex-1 transition-all duration-300 pt-14 lg:pt-0 ${
+        sidebarCollapsed ? 'lg:ml-[68px]' : 'lg:ml-60'
       }`}>
-        <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 sm:py-8">
           {activeView === 'dashboard' && (
             <Dashboard airports={airports} routes={routes} />
           )}

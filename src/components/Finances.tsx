@@ -230,8 +230,8 @@ export default function Finances({ isAdmin }: FinancesProps) {
 
       {/* Monthly billing (admin) */}
       {isAdmin && (
-        <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 sm:p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
             <div className="flex items-center gap-3">
               <Calendar className="w-5 h-5 text-amber-400" />
               <div>
@@ -242,7 +242,7 @@ export default function Finances({ isAdmin }: FinancesProps) {
             <button
               onClick={processMonthlyBilling}
               disabled={processingMonthly}
-              className="px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-600 text-white text-sm font-semibold rounded-lg transition-all"
+              className="px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:bg-slate-600 text-white text-sm font-semibold rounded-lg transition-all w-full sm:w-auto"
             >
               {processingMonthly ? 'Processing...' : 'Process Monthly Costs'}
             </button>
