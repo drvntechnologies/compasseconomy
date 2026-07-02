@@ -360,31 +360,44 @@ body {
 
 .win98 .text-sky-400,
 .win98 .text-sky-300 {
-  color: var(--w98-highlight) !important;
+  color: #000000 !important;
 }
 
 .win98 .text-emerald-400,
 .win98 .text-emerald-300 {
-  color: #008000 !important;
+  color: #006400 !important;
 }
 
 .win98 .text-red-400,
 .win98 .text-red-300 {
-  color: #ff0000 !important;
+  color: #cc0000 !important;
 }
 
 .win98 .text-amber-400,
 .win98 .text-amber-300,
 .win98 .text-yellow-400 {
-  color: #808000 !important;
+  color: #664400 !important;
 }
 
 .win98 .text-violet-400 {
-  color: #800080 !important;
+  color: #660066 !important;
 }
 
 .win98 .text-cyan-400 {
-  color: #008080 !important;
+  color: #005555 !important;
+}
+
+.win98 .text-cyan-300,
+.win98 .text-cyan-600 {
+  color: #004444 !important;
+}
+
+.win98 .text-sky-500 {
+  color: #000000 !important;
+}
+
+.win98 .text-emerald-500 {
+  color: #006400 !important;
 }
 
 /* Buttons throughout */
@@ -518,10 +531,22 @@ body {
 .win98 [class*="bg-violet-500\/10"],
 .win98 [class*="bg-amber-500\/10"],
 .win98 [class*="bg-red-500\/10"],
-.win98 [class*="bg-cyan-500\/10"] {
+.win98 [class*="bg-cyan-500\/10"],
+.win98 [class*="bg-teal-500\/10"] {
   background: var(--w98-window) !important;
   border: 1px solid var(--w98-border-dark) !important;
   padding: 1px 4px !important;
+}
+
+/* Teal text (used by W98 toggle active state) */
+.win98 .text-teal-400 {
+  color: #005050 !important;
+}
+
+/* Orange text */
+.win98 .text-orange-400,
+.win98 .text-orange-300 {
+  color: #994400 !important;
 }
 
 /* Scrollbars */

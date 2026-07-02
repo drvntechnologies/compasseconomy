@@ -262,10 +262,10 @@ export default function App() {
         </div>
 
         {/* Theme + Collapse toggle */}
-        <div className="px-3 py-2 border-t border-slate-700 shrink-0 flex items-center gap-1">
+        <div className="px-3 py-2 border-t border-slate-700 shrink-0 flex items-center gap-1 overflow-hidden">
           <button
             onClick={() => setWin98Mode(!win98Mode)}
-            className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs transition-all ${
+            className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs transition-all shrink-0 ${
               win98Mode ? 'text-teal-400 bg-teal-500/10' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-700/50'
             }`}
             title={win98Mode ? 'Disable retro mode' : 'Enable Windows 98 mode'}
@@ -275,7 +275,7 @@ export default function App() {
           </button>
           <button
             onClick={() => setDarkMode(!darkMode)}
-            className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-all"
+            className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-all shrink-0"
             title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
           >
             {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -283,7 +283,7 @@ export default function App() {
           </button>
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-all ml-auto"
+            className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-all ml-auto shrink-0"
           >
             {sidebarCollapsed ? (
               <PanelLeft className="w-4 h-4" />
