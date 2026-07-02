@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Aircraft, Airport, Gate, SizeCategory } from '../lib/types';
 import { AIRCRAFT_SIZE_MAP } from '../lib/types';
-import { Plane, Plus, Trash2, Filter, Wrench, CheckCircle, AlertCircle, DoorOpen, X } from 'lucide-react';
+import { Plane, Plus, Trash2, Filter, Wrench, CheckCircle, AlertCircle, DoorOpen, X, Pencil } from 'lucide-react';
 
 interface FleetProps {
   airports: Airport[];
@@ -49,6 +49,20 @@ export default function Fleet({ airports, isAdmin }: FleetProps) {
   const [gatePickerOptions, setGatePickerOptions] = useState<Gate[]>([]);
   const [gatePickerLoading, setGatePickerLoading] = useState(false);
   const [aircraftGates, setAircraftGates] = useState<Record<string, Gate | null>>({});
+
+  // Edit state
+  const [editingAircraft, setEditingAircraft] = useState<Aircraft | null>(null);
+  const [editForm, setEditForm] = useState({
+    tail_number: '',
+    aircraft_type: '',
+    size_category: 'medium' as SizeCategory,
+    max_pax: 0,
+    current_airport_icao: '',
+    hourly_cost_usd: '',
+    monthly_lease_usd: '',
+  });
+  const [editError, setEditError] = useState('');
+  const [editSubmitting, setEditSubmitting] = useState(false);
 
   const airportCodes = useMemo(() => airports.map(a => a.icao_code).sort(), [airports]);
   const aircraftTypes = useMemo(() => [...new Set(aircraft.map(a => a.aircraft_type))].sort(), [aircraft]);
@@ -188,6 +202,50 @@ export default function Fleet({ airports, isAdmin }: FleetProps) {
     const newStatus = ac.status === 'maintenance' ? 'available' : 'maintenance';
     await supabase.from('aircraft').update({ status: newStatus }).eq('id', ac.id);
     fetchAircraft();
+  }
+
+  function openEditModal(ac: Aircraft) {
+    setEditingAircraft(ac);
+    setEditForm({
+      tail_number: ac.tail_number,
+      aircraft_type: ac.aircraft_type,
+      size_category: ac.size_category,
+      max_pax: ac.max_pax,
+      current_airport_icao: ac.current_airport_icao,
+      hourly_cost_usd: ac.hourly_cost_usd.toString(),
+      monthly_lease_usd: ac.monthly_lease_usd.toString(),
+    });
+    setEditError('');
+  }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingAircraft) return;
+    setEditError('');
+
+    if (!editForm.tail_number || !editForm.aircraft_type || !editForm.current_airport_icao || editForm.max_pax <= 0) {
+      setEditError('Tail number, type, location, and max PAX are required.');
+      return;
+    }
+
+    setEditSubmitting(true);
+    const { error } = await supabase.from('aircraft').update({
+      tail_number: editForm.tail_number.toUpperCase().trim(),
+      aircraft_type: editForm.aircraft_type.trim(),
+      size_category: editForm.size_category,
+      max_pax: editForm.max_pax,
+      current_airport_icao: editForm.current_airport_icao.toUpperCase().trim(),
+      hourly_cost_usd: editForm.hourly_cost_usd ? parseFloat(editForm.hourly_cost_usd) : 0,
+      monthly_lease_usd: editForm.monthly_lease_usd ? parseFloat(editForm.monthly_lease_usd) : 0,
+    }).eq('id', editingAircraft.id);
+
+    if (error) {
+      setEditError(error.message);
+    } else {
+      setEditingAircraft(null);
+      fetchAircraft();
+    }
+    setEditSubmitting(false);
   }
 
   function handleTypeChange(type: string) {
@@ -482,6 +540,14 @@ export default function Fleet({ airports, isAdmin }: FleetProps) {
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-1">
                             <button
+                              onClick={() => openEditModal(ac)}
+                              disabled={ac.status === 'in_flight'}
+                              className="p-1.5 text-slate-400 hover:text-sky-400 hover:bg-sky-400/10 rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                              title="Edit aircraft"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
                               onClick={() => toggleMaintenance(ac)}
                               disabled={ac.status === 'reserved' || ac.status === 'in_flight'}
                               className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-amber-400/10 rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
@@ -508,6 +574,139 @@ export default function Fleet({ airports, isAdmin }: FleetProps) {
           </div>
         )}
       </div>
+      {/* Edit Aircraft Modal */}
+      {editingAircraft && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-2xl w-full max-w-lg">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-sky-500/10 rounded-lg flex items-center justify-center">
+                  <Pencil className="w-4 h-4 text-sky-400" />
+                </div>
+                <div>
+                  <h2 className="text-white font-semibold">Edit Aircraft</h2>
+                  <p className="text-slate-400 text-xs">{editingAircraft.tail_number}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingAircraft(null)}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={saveEdit} className="p-6 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1.5 font-medium">Tail Number</label>
+                  <input
+                    type="text"
+                    value={editForm.tail_number}
+                    onChange={e => setEditForm({ ...editForm, tail_number: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-sky-500/40 focus:border-sky-500 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1.5 font-medium">Aircraft Type</label>
+                  <input
+                    type="text"
+                    value={editForm.aircraft_type}
+                    onChange={e => {
+                      const type = e.target.value;
+                      setEditForm(prev => ({
+                        ...prev,
+                        aircraft_type: type,
+                        size_category: AIRCRAFT_SIZE_MAP[type] || prev.size_category,
+                      }));
+                    }}
+                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-sky-500/40 focus:border-sky-500 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1.5 font-medium">Size Category</label>
+                  <select
+                    value={editForm.size_category}
+                    onChange={e => setEditForm({ ...editForm, size_category: e.target.value as SizeCategory })}
+                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-sky-500/40 focus:border-sky-500 transition-all"
+                  >
+                    {Object.entries(SIZE_LABELS).map(([val, label]) => (
+                      <option key={val} value={val}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1.5 font-medium">Max PAX</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={editForm.max_pax || ''}
+                    onChange={e => setEditForm({ ...editForm, max_pax: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-sky-500/40 focus:border-sky-500 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1.5 font-medium">Location (ICAO)</label>
+                  <select
+                    value={editForm.current_airport_icao}
+                    onChange={e => setEditForm({ ...editForm, current_airport_icao: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-sky-500/40 focus:border-sky-500 transition-all"
+                  >
+                    <option value="">Select...</option>
+                    {airportCodes.map(code => <option key={code} value={code}>{code}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1.5 font-medium">Hourly Cost ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={editForm.hourly_cost_usd}
+                    onChange={e => setEditForm({ ...editForm, hourly_cost_usd: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-sky-500/40 focus:border-sky-500 transition-all"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs text-slate-400 mb-1.5 font-medium">Monthly Lease ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={editForm.monthly_lease_usd}
+                    onChange={e => setEditForm({ ...editForm, monthly_lease_usd: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-sky-500/40 focus:border-sky-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              {editError && (
+                <div className="flex items-center gap-2 text-red-400 text-sm">
+                  <AlertCircle className="w-4 h-4" />
+                  {editError}
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={editSubmitting}
+                  className="flex-1 py-2.5 bg-sky-500 hover:bg-sky-400 disabled:bg-slate-600 text-white font-semibold text-sm rounded-lg transition-all"
+                >
+                  {editSubmitting ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingAircraft(null)}
+                  className="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm rounded-lg transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
