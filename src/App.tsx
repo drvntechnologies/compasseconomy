@@ -10,7 +10,7 @@ import Dispatch from './components/Dispatch';
 import Fleet from './components/Fleet';
 import Gates from './components/Gates';
 import Finances from './components/Finances';
-import { Plane, LogOut, LayoutDashboard, Settings, Users, Navigation, Clock, Gauge, Radio, PanelLeftClose, PanelLeft, DoorOpen, DollarSign, KeyRound } from 'lucide-react';
+import { Plane, LogOut, LayoutDashboard, Settings, Users, Navigation, Clock, Gauge, Radio, PanelLeftClose, PanelLeft, DoorOpen, DollarSign, KeyRound, Sun, Moon } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 
 export default function App() {
@@ -27,7 +27,20 @@ export default function App() {
   const [resetError, setResetError] = useState('');
   const [resetSuccess, setResetSuccess] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('theme');
+    return saved ? saved === 'dark' : true;
+  });
   const intervalRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
 
   useEffect(() => {
     intervalRef.current = window.setInterval(() => setNow(new Date()), 1000);
@@ -236,11 +249,19 @@ export default function App() {
           )}
         </div>
 
-        {/* Collapse toggle */}
-        <div className="px-3 py-2 border-t border-slate-700 shrink-0">
+        {/* Theme + Collapse toggle */}
+        <div className="px-3 py-2 border-t border-slate-700 shrink-0 flex items-center gap-1">
+          <button
+            onClick={() => setDarkMode(!darkMode)}
+            className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-all"
+            title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            {!sidebarCollapsed && <span>{darkMode ? 'Light' : 'Dark'}</span>}
+          </button>
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-all"
+            className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-all ml-auto"
           >
             {sidebarCollapsed ? (
               <PanelLeft className="w-4 h-4" />
