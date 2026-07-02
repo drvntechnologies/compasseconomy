@@ -253,9 +253,9 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
         const aIsLayover = a.status === 'layover' ? 0 : 1;
         const bIsLayover = b.status === 'layover' ? 0 : 1;
         if (aIsLayover !== bIsLayover) return aIsLayover - bIsLayover;
-        const aIsDirect = a.destination_icao === arrivalIcao ? 0 : 1;
-        const bIsDirect = b.destination_icao === arrivalIcao ? 0 : 1;
-        if (aIsDirect !== bIsDirect) return aIsDirect - bIsDirect;
+        const aIsConnecting = a.destination_icao !== arrivalIcao ? 0 : 1;
+        const bIsConnecting = b.destination_icao !== arrivalIcao ? 0 : 1;
+        if (aIsConnecting !== bIsConnecting) return aIsConnecting - bIsConnecting;
         return b.connections_remaining - a.connections_remaining;
       });
 
