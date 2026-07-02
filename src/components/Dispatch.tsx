@@ -221,8 +221,6 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
 
     const arrivalIcao = arrival.toUpperCase();
     const departureIcao = departure.toUpperCase();
-    const arrivalAirport = airports.find(a => a.icao_code === arrivalIcao);
-    const arrivalIsHub = arrivalAirport?.is_hub ?? false;
 
     const allEligible: PaxPool[] = [];
     const pageSize = 1000;
@@ -246,28 +244,42 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
     }
 
     const activeRoutes = routes.filter(r => r.is_active);
-    const destsFromHere = new Set(activeRoutes.filter(r => r.departure_icao === departureIcao).map(r => r.arrival_icao));
     const destsFromArrival = new Set(activeRoutes.filter(r => r.departure_icao === arrivalIcao).map(r => r.arrival_icao));
+
+    // Build 2-hop reachability: destinations reachable from arrival within 2 hops (via any intermediate)
+    const destsFromArrival2Hop = new Set<string>();
+    destsFromArrival.forEach(intermediate => {
+      activeRoutes.filter(r => r.departure_icao === intermediate).forEach(r => {
+        destsFromArrival2Hop.add(r.arrival_icao);
+      });
+    });
 
     const availablePools = allEligible
       .filter(p => {
         if (p.destination_icao === arrivalIcao) return true;
-        if (p.connections_remaining > 0 && arrivalIsHub) return true;
-        if (p.status === 'layover' && p.destination_icao !== arrivalIcao) {
-          const canReachFromHere = destsFromHere.has(p.destination_icao);
-          const canReachFromArrival = destsFromArrival.has(p.destination_icao);
-          return !canReachFromHere && canReachFromArrival;
+        if (p.connections_remaining > 0) {
+          // Direct 1-hop: arrival has a route to destination
+          if (destsFromArrival.has(p.destination_icao)) return true;
+          // 2-hop: passenger has 2+ connections and can reach via intermediate from arrival
+          if (p.connections_remaining > 1 && destsFromArrival2Hop.has(p.destination_icao)) return true;
         }
         return false;
       })
       .sort((a, b) => {
+        // Priority 1: Terminating passengers (destination IS the arrival)
+        const aTerminating = a.destination_icao === arrivalIcao ? 0 : 1;
+        const bTerminating = b.destination_icao === arrivalIcao ? 0 : 1;
+        if (aTerminating !== bTerminating) return aTerminating - bTerminating;
+        // Priority 2: 1-hop reachable from arrival (direct next leg) over 2-hop
+        const aDirectReach = destsFromArrival.has(a.destination_icao) ? 0 : 1;
+        const bDirectReach = destsFromArrival.has(b.destination_icao) ? 0 : 1;
+        if (aDirectReach !== bDirectReach) return aDirectReach - bDirectReach;
+        // Priority 3: Layover passengers get slight priority (they've been waiting longer)
         const aIsLayover = a.status === 'layover' ? 0 : 1;
         const bIsLayover = b.status === 'layover' ? 0 : 1;
         if (aIsLayover !== bIsLayover) return aIsLayover - bIsLayover;
-        const aIsConnecting = a.destination_icao !== arrivalIcao ? 0 : 1;
-        const bIsConnecting = b.destination_icao !== arrivalIcao ? 0 : 1;
-        if (aIsConnecting !== bIsConnecting) return aIsConnecting - bIsConnecting;
-        return b.connections_remaining - a.connections_remaining;
+        // Priority 4: Fewer connections remaining = closer to destination = board first
+        return a.connections_remaining - b.connections_remaining;
       });
 
     const totalAvailable = availablePools.reduce((sum, p) => sum + p.pax_count, 0);
