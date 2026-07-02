@@ -1,5 +1,7 @@
-import { X, Plane, MapPin, ArrowRight, Users, RefreshCw } from 'lucide-react';
-import type { Airport, Route, PaxPool } from '../lib/types';
+import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+import { X, Plane, MapPin, ArrowRight, Users, RefreshCw, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import type { Airport, Route, PaxPool, FlightBooking } from '../lib/types';
 import { COASTLINES } from '../lib/coastlines';
 
 const AIRPORT_COORDS: Record<string, [number, number]> = {
@@ -69,6 +71,62 @@ interface DemandLine {
 
 export default function AirportDetailModal({ airport, airports, routes, paxPools, onClose }: Props) {
   const icao = airport.icao_code;
+
+  // Recent flights state
+  const [recentFlights, setRecentFlights] = useState<FlightBooking[]>([]);
+  const [flightPaxManifests, setFlightPaxManifests] = useState<Record<string, { destination_icao: string; pax_count: number }[]>>({});
+  const [flightsLoading, setFlightsLoading] = useState(true);
+  const [expandedFlight, setExpandedFlight] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchRecentFlights();
+  }, [icao]);
+
+  async function fetchRecentFlights() {
+    setFlightsLoading(true);
+    const { data: flights } = await supabase
+      .from('flight_bookings')
+      .select('*')
+      .or(`departure_icao.eq.${icao},arrival_icao.eq.${icao}`)
+      .in('status', ['completed', 'booked'])
+      .order('departure_time_utc', { ascending: false })
+      .limit(20);
+
+    if (flights && flights.length > 0) {
+      setRecentFlights(flights);
+
+      // Fetch pax manifests for completed flights
+      const completedIds = flights.filter(f => f.status === 'completed').map(f => f.id);
+      if (completedIds.length > 0) {
+        const { data: paxRows } = await supabase
+          .from('pax_pools')
+          .select('booking_id, destination_icao, pax_count')
+          .in('booking_id', completedIds);
+
+        if (paxRows) {
+          const manifests: Record<string, { destination_icao: string; pax_count: number }[]> = {};
+          for (const row of paxRows) {
+            if (!row.booking_id) continue;
+            if (!manifests[row.booking_id]) manifests[row.booking_id] = [];
+            manifests[row.booking_id].push({ destination_icao: row.destination_icao, pax_count: row.pax_count });
+          }
+          // Aggregate by destination per flight
+          const aggregated: Record<string, { destination_icao: string; pax_count: number }[]> = {};
+          for (const [bookingId, rows] of Object.entries(manifests)) {
+            const byDest: Record<string, number> = {};
+            for (const r of rows) {
+              byDest[r.destination_icao] = (byDest[r.destination_icao] || 0) + r.pax_count;
+            }
+            aggregated[bookingId] = Object.entries(byDest)
+              .map(([dest, count]) => ({ destination_icao: dest, pax_count: count }))
+              .sort((a, b) => b.pax_count - a.pax_count);
+          }
+          setFlightPaxManifests(aggregated);
+        }
+      }
+    }
+    setFlightsLoading(false);
+  }
 
   // Outbound: pax at this airport heading elsewhere
   const outboundPools = paxPools.filter(
@@ -364,6 +422,120 @@ export default function AirportDetailModal({ airport, airports, routes, paxPools
               </div>
             </div>
           )}
+
+          {/* Recent Flights */}
+          <div className="mt-6 rounded-xl border border-slate-700 bg-slate-800/50 p-4">
+            <h3 className="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wide flex items-center gap-2">
+              <Clock className="w-4 h-4 text-sky-400" />
+              Recent Flights ({recentFlights.length})
+            </h3>
+            {flightsLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <div className="animate-spin w-5 h-5 border-2 border-sky-500 border-t-transparent rounded-full" />
+              </div>
+            ) : recentFlights.length === 0 ? (
+              <p className="text-slate-500 text-xs py-4 text-center">No recent flights to/from {icao}</p>
+            ) : (
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {recentFlights.map(flight => {
+                  const isExpanded = expandedFlight === flight.id;
+                  const manifest = flightPaxManifests[flight.id] || [];
+                  const isOutbound = flight.departure_icao === icao;
+                  const depTime = new Date(flight.departure_time_utc);
+                  const timeStr = depTime.toISOString().slice(5, 16).replace('T', ' ') + 'Z';
+
+                  return (
+                    <div key={flight.id} className="rounded-lg border border-slate-700/50 bg-slate-900/60 overflow-hidden">
+                      <button
+                        onClick={() => setExpandedFlight(isExpanded ? null : flight.id)}
+                        className="w-full flex items-center gap-3 p-3 text-left hover:bg-slate-800/50 transition-colors"
+                      >
+                        <div className={`w-1.5 h-8 rounded-full shrink-0 ${
+                          flight.status === 'completed' ? 'bg-emerald-500' : flight.status === 'booked' ? 'bg-sky-500' : 'bg-slate-600'
+                        }`} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-white font-mono font-semibold text-sm">CPZ{flight.flight_number}</span>
+                            <div className="flex items-center gap-1 text-xs text-slate-400">
+                              <span className={isOutbound ? 'text-amber-400 font-medium' : 'text-slate-300'}>{flight.departure_icao}</span>
+                              <ArrowRight className="w-3 h-3 text-slate-600" />
+                              <span className={!isOutbound ? 'text-sky-400 font-medium' : 'text-slate-300'}>{flight.arrival_icao}</span>
+                            </div>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                              flight.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400'
+                              : flight.status === 'booked' ? 'bg-sky-500/10 text-sky-400'
+                              : 'bg-slate-700 text-slate-400'
+                            }`}>
+                              {flight.status.toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+                            <span>{timeStr}</span>
+                            <span className="flex items-center gap-1">
+                              <Users className="w-3 h-3" />
+                              {flight.pax_count} PAX
+                            </span>
+                          </div>
+                        </div>
+                        {flight.status === 'completed' && manifest.length > 0 && (
+                          isExpanded
+                            ? <ChevronUp className="w-4 h-4 text-slate-500 shrink-0" />
+                            : <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
+                        )}
+                      </button>
+
+                      {/* Expanded PAX manifest */}
+                      {isExpanded && manifest.length > 0 && (
+                        <div className="border-t border-slate-700/50 px-3 py-2.5 bg-slate-950/50">
+                          <p className="text-[10px] text-slate-500 uppercase tracking-wide font-medium mb-2">
+                            Passenger Final Destinations
+                          </p>
+                          <div className="space-y-1">
+                            {manifest.map(m => {
+                              const reachedDest = m.destination_icao === flight.arrival_icao;
+                              return (
+                                <div key={m.destination_icao} className="flex items-center justify-between text-xs px-2 py-1.5 rounded bg-slate-900/80">
+                                  <div className="flex items-center gap-2">
+                                    <MapPin className={`w-3 h-3 ${reachedDest ? 'text-emerald-400' : 'text-amber-400'}`} />
+                                    <span className="text-white font-mono">{m.destination_icao}</span>
+                                    {reachedDest && (
+                                      <span className="text-[9px] text-emerald-400 font-bold">ARRIVED</span>
+                                    )}
+                                    {!reachedDest && (
+                                      <span className="text-[9px] text-amber-400 font-medium">CONNECTING</span>
+                                    )}
+                                  </div>
+                                  <span className="text-white font-semibold">{m.pax_count}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-800 text-[10px] text-slate-500">
+                            <span>
+                              {manifest.filter(m => m.destination_icao === flight.arrival_icao).reduce((s, m) => s + m.pax_count, 0)} terminated
+                            </span>
+                            <span className="text-slate-700">|</span>
+                            <span>
+                              {manifest.filter(m => m.destination_icao !== flight.arrival_icao).reduce((s, m) => s + m.pax_count, 0)} connecting onward
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* For booked flights, show pax currently reserved */}
+                      {isExpanded && flight.status === 'booked' && (
+                        <div className="border-t border-slate-700/50 px-3 py-2.5 bg-slate-950/50">
+                          <p className="text-[10px] text-slate-500 uppercase tracking-wide font-medium">
+                            Flight pending departure - {flight.pax_count} PAX reserved
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
