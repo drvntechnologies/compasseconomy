@@ -245,12 +245,21 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
       }
     }
 
+    const activeRoutes = routes.filter(r => r.is_active);
+    const destsFromHere = new Set(activeRoutes.filter(r => r.departure_icao === departureIcao).map(r => r.arrival_icao));
+    const destsFromArrival = new Set(activeRoutes.filter(r => r.departure_icao === arrivalIcao).map(r => r.arrival_icao));
+
     const availablePools = allEligible
-      .filter(p =>
-        p.destination_icao === arrivalIcao ||
-        (p.connections_remaining > 0 && arrivalIsHub) ||
-        (p.status === 'layover' && p.destination_icao !== arrivalIcao)
-      )
+      .filter(p => {
+        if (p.destination_icao === arrivalIcao) return true;
+        if (p.connections_remaining > 0 && arrivalIsHub) return true;
+        if (p.status === 'layover' && p.destination_icao !== arrivalIcao) {
+          const canReachFromHere = destsFromHere.has(p.destination_icao);
+          const canReachFromArrival = destsFromArrival.has(p.destination_icao);
+          return !canReachFromHere && canReachFromArrival;
+        }
+        return false;
+      })
       .sort((a, b) => {
         const aIsLayover = a.status === 'layover' ? 0 : 1;
         const bIsLayover = b.status === 'layover' ? 0 : 1;
