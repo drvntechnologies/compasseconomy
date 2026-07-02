@@ -7,6 +7,7 @@ import SearchableSelect from './SearchableSelect';
 interface DispatchProps {
   airports: Airport[];
   routes: Route[];
+  currentUserId: string | null;
 }
 
 const SIZE_HIERARCHY: SizeCategory[] = ['ramp', 'small', 'medium', 'heavy'];
@@ -16,7 +17,7 @@ function getCompatibleGateTypes(aircraftSize: SizeCategory): SizeCategory[] {
   return SIZE_HIERARCHY.slice(idx);
 }
 
-export default function Dispatch({ airports, routes }: DispatchProps) {
+export default function Dispatch({ airports, routes, currentUserId }: DispatchProps) {
   const [bookings, setBookings] = useState<FlightBooking[]>([]);
   const [bookedPaxMap, setBookedPaxMap] = useState<Record<string, PaxPool[]>>({});
   const [loading, setLoading] = useState(true);
@@ -29,6 +30,7 @@ export default function Dispatch({ airports, routes }: DispatchProps) {
   // Gate assignment state
   const [gateAssignments, setGateAssignments] = useState<Record<string, Gate>>({});
   const [requestingGate, setRequestingGate] = useState<string | null>(null);
+  const [pilotNames, setPilotNames] = useState<Record<string, string>>({});
 
   // Booking form state
   const [departure, setDeparture] = useState('');
@@ -99,6 +101,7 @@ export default function Dispatch({ airports, routes }: DispatchProps) {
 
     if (bookingData) {
       setBookings(bookingData);
+      fetchPilotNames(bookingData);
       const map: Record<string, PaxPool[]> = {};
       const acMap: Record<string, Aircraft> = {};
       const gateMap: Record<string, Gate> = {};
@@ -143,6 +146,17 @@ export default function Dispatch({ airports, routes }: DispatchProps) {
     if (data) setAvailableAircraft(data);
   }
 
+  async function fetchPilotNames(bookingData: FlightBooking[]) {
+    const userIds = [...new Set(bookingData.map(b => b.user_id))];
+    if (userIds.length === 0) return;
+    const { data } = await supabase.from('profiles').select('id, display_name').in('id', userIds);
+    if (data) {
+      const map: Record<string, string> = {};
+      for (const p of data) map[p.id] = p.display_name || p.id.slice(0, 8);
+      setPilotNames(map);
+    }
+  }
+
   async function fetchBookings() {
     setLoading(true);
     const { data: bookingData } = await supabase
@@ -153,6 +167,7 @@ export default function Dispatch({ airports, routes }: DispatchProps) {
 
     if (bookingData) {
       setBookings(bookingData);
+      fetchPilotNames(bookingData);
       const map: Record<string, PaxPool[]> = {};
       const acMap: Record<string, Aircraft> = {};
       const gateMap: Record<string, Gate> = {};
@@ -787,6 +802,13 @@ export default function Dispatch({ airports, routes }: DispatchProps) {
                           <span>DEP {formatUtcTime(booking.departure_time_utc)}</span>
                           <span className="text-slate-600 ml-1">{formatUtcDate(booking.departure_time_utc)}</span>
                         </div>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                          booking.user_id === currentUserId
+                            ? 'bg-sky-500/10 text-sky-400'
+                            : 'bg-slate-700 text-slate-400'
+                        }`}>
+                          {pilotNames[booking.user_id] || 'Pilot'}
+                        </span>
                       </div>
 
                       {/* Aircraft & Gate info */}
@@ -854,7 +876,8 @@ export default function Dispatch({ airports, routes }: DispatchProps) {
                       )}
                     </div>
 
-                    {/* Actions */}
+                    {/* Actions - only show to booking owner */}
+                    {currentUserId && booking.user_id === currentUserId && (
                     <div className="flex flex-col gap-2 shrink-0">
                       {!assignedGate && (
                         <button
@@ -901,6 +924,7 @@ export default function Dispatch({ airports, routes }: DispatchProps) {
                         Cancel
                       </button>
                     </div>
+                    )}
                   </div>
                 </div>
               );
