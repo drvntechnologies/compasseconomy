@@ -488,13 +488,20 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
       engine_hours: engineHours,
     }).eq('id', bookingId);
 
-    // Move aircraft to arrival and set available
+    // Move aircraft to arrival and set available, unassign origin gate
     if (booking.aircraft_id) {
       await supabase.from('aircraft').update({
         current_airport_icao: arrivalIcao,
         status: 'available',
         reserved_by_booking_id: null,
       }).eq('id', booking.aircraft_id);
+
+      // Release any gate assigned to this aircraft at the origin
+      await supabase.from('gates').update({
+        status: 'open',
+        assigned_aircraft_id: null,
+        occupied_since: null,
+      }).eq('assigned_aircraft_id', booking.aircraft_id);
     }
 
     // --- ECONOMY: Calculate revenue and costs ---
