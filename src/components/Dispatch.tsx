@@ -860,31 +860,42 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
                       </div>
 
                       {/* Passenger details */}
-                      {paxForBooking.length > 0 && (
-                        <div className="mt-3 bg-slate-900/50 rounded-lg p-3">
-                          <p className="text-xs text-slate-500 font-medium mb-2">Passenger Manifest</p>
-                          <div className="space-y-1">
-                            {paxForBooking.map(pool => (
-                              <div key={pool.id} className="flex items-center gap-3 text-xs">
-                                <span className="text-white font-mono w-8 text-right">{pool.pax_count}</span>
-                                <span className="text-slate-500">PAX</span>
-                                <span className="text-slate-400">{pool.origin_icao}</span>
-                                <ArrowRight className="w-3 h-3 text-slate-600" />
-                                <span className={pool.destination_icao === booking.arrival_icao ? 'text-emerald-400' : 'text-violet-400'}>
-                                  {pool.destination_icao}
-                                </span>
-                                <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded ${
-                                  pool.destination_icao === booking.arrival_icao
-                                    ? 'bg-emerald-500/10 text-emerald-400'
-                                    : 'bg-violet-500/10 text-violet-400'
-                                }`}>
-                                  {pool.destination_icao === booking.arrival_icao ? 'FINAL' : `+${pool.connections_remaining} legs`}
-                                </span>
-                              </div>
-                            ))}
+                      {paxForBooking.length > 0 && (() => {
+                        const grouped = paxForBooking.reduce<Record<string, { origin_icao: string; destination_icao: string; pax_count: number }>>((acc, pool) => {
+                          const key = `${pool.origin_icao}-${pool.destination_icao}`;
+                          if (!acc[key]) {
+                            acc[key] = { origin_icao: pool.origin_icao, destination_icao: pool.destination_icao, pax_count: 0 };
+                          }
+                          acc[key].pax_count += pool.pax_count;
+                          return acc;
+                        }, {});
+                        const manifestRows = Object.values(grouped).sort((a, b) => b.pax_count - a.pax_count);
+                        return (
+                          <div className="mt-3 bg-slate-900/50 rounded-lg p-3">
+                            <p className="text-xs text-slate-500 font-medium mb-2">Passenger Manifest</p>
+                            <div className="space-y-1">
+                              {manifestRows.map(row => (
+                                <div key={`${row.origin_icao}-${row.destination_icao}`} className="flex items-center gap-3 text-xs">
+                                  <span className="text-white font-mono w-8 text-right">{row.pax_count}</span>
+                                  <span className="text-slate-500">PAX</span>
+                                  <span className="text-slate-400">{row.origin_icao}</span>
+                                  <ArrowRight className="w-3 h-3 text-slate-600" />
+                                  <span className={row.destination_icao === booking.arrival_icao ? 'text-emerald-400' : 'text-violet-400'}>
+                                    {row.destination_icao}
+                                  </span>
+                                  <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded ${
+                                    row.destination_icao === booking.arrival_icao
+                                      ? 'bg-emerald-500/10 text-emerald-400'
+                                      : 'bg-violet-500/10 text-violet-400'
+                                  }`}>
+                                    {row.destination_icao === booking.arrival_icao ? 'FINAL' : 'CONNECTING'}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
                     </div>
 
                     {/* Actions - only show to booking owner */}
