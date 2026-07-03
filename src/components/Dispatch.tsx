@@ -30,6 +30,7 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
   // Gate assignment state
   const [gateAssignments, setGateAssignments] = useState<Record<string, Gate>>({});
   const [requestingGate, setRequestingGate] = useState<string | null>(null);
+  const [gateError, setGateError] = useState<string | null>(null);
   const [pilotNames, setPilotNames] = useState<Record<string, string>>({});
 
   // Booking form state
@@ -385,14 +386,16 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
 
   async function requestGate(bookingId: string) {
     setRequestingGate(bookingId);
+    setGateError(null);
     const booking = bookings.find(b => b.id === bookingId);
     if (!booking || !booking.aircraft_id) {
+      setGateError('No aircraft assigned to this booking.');
       setRequestingGate(null);
       return;
     }
 
     const ac = bookingAircraftMap[bookingId];
-    if (!ac) { setRequestingGate(null); return; }
+    if (!ac) { setGateError('Aircraft data not loaded.'); setRequestingGate(null); return; }
 
     const arrivalIcao = booking.arrival_icao;
     const aircraftSize = ac.size_category;
@@ -406,6 +409,7 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
       .order('gate_number');
 
     if (!openGates || openGates.length === 0) {
+      setGateError(`No open gates at ${arrivalIcao}. All gates are currently occupied.`);
       setRequestingGate(null);
       return;
     }
@@ -423,6 +427,7 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
     }
 
     if (!assignedGate) {
+      setGateError(`No compatible gate at ${arrivalIcao} for ${ac.tail_number} (${aircraftSize}). Open gates are: ${openGates.map(g => `${g.gate_number} (${g.gate_type})`).join(', ')}`);
       setRequestingGate(null);
       return;
     }
@@ -939,6 +944,9 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
                           <DoorOpen className="w-4 h-4" />
                           {requestingGate === booking.id ? 'Assigning...' : 'Request Gate'}
                         </button>
+                      )}
+                      {!assignedGate && gateError && requestingGate === null && (
+                        <p className="text-xs text-red-400 max-w-[220px]">{gateError}</p>
                       )}
                       <div className="flex items-center gap-1.5">
                         <Timer className="w-3.5 h-3.5 text-slate-400" />
