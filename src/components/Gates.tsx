@@ -159,10 +159,11 @@ export default function Gates({ airports, isAdmin }: GatesProps) {
   const openCount = gates.filter(g => g.status === 'open').length;
   const occupiedCount = gates.filter(g => g.status === 'occupied').length;
 
-  function getAircraftTail(acId: string | null): string {
-    if (!acId) return '-';
+  function getAircraftInfo(acId: string | null): { tail: string; type: string } | null {
+    if (!acId) return null;
     const ac = aircraft.find(a => a.id === acId);
-    return ac ? ac.tail_number : '-';
+    if (!ac) return null;
+    return { tail: ac.tail_number, type: ac.aircraft_type };
   }
 
   function formatPrice(gate: Gate): string {
@@ -346,14 +347,18 @@ export default function Gates({ airports, isAdmin }: GatesProps) {
                         </span>
                       </td>
                       <td className="px-4 py-2.5">
-                        {gate.assigned_aircraft_id ? (
-                          <span className="flex items-center gap-1 text-xs text-sky-300 font-mono">
+                        {(() => {
+                        const info = getAircraftInfo(gate.assigned_aircraft_id);
+                        return info ? (
+                          <span className="flex items-center gap-1.5 text-xs text-sky-300">
                             <Plane className="w-3 h-3" />
-                            {getAircraftTail(gate.assigned_aircraft_id)}
+                            <span className="font-mono font-semibold">{info.tail}</span>
+                            <span className="text-slate-500">{info.type}</span>
                           </span>
                         ) : (
                           <span className="text-xs text-slate-500">-</span>
-                        )}
+                        );
+                      })()}
                       </td>
                       {isAdmin && (
                         <td className="px-4 py-2.5 text-right">
