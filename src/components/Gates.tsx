@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Gate, Airport, GateType, LeaseType, Aircraft } from '../lib/types';
-import { DoorOpen, Plus, Trash2, Filter, AlertCircle, Plane } from 'lucide-react';
+import { DoorOpen, Plus, Trash2, Filter, AlertCircle, Plane, Pencil, X } from 'lucide-react';
 
 interface GatesProps {
   airports: Airport[];
@@ -38,6 +38,17 @@ export default function Gates({ airports, isAdmin }: GatesProps) {
   });
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Edit state
+  const [editingGate, setEditingGate] = useState<Gate | null>(null);
+  const [editForm, setEditForm] = useState({
+    gate_type: 'medium' as GateType,
+    lease_type: 'full_time' as LeaseType,
+    monthly_price: '',
+    hourly_price: '',
+  });
+  const [editError, setEditError] = useState('');
+  const [editSubmitting, setEditSubmitting] = useState(false);
 
   const airportCodes = useMemo(() => airports.map(a => a.icao_code).sort(), [airports]);
 
@@ -96,6 +107,39 @@ export default function Gates({ airports, isAdmin }: GatesProps) {
       occupied_since: null,
     }).eq('id', id);
     fetchData();
+  }
+
+  function openEditModal(gate: Gate) {
+    setEditingGate(gate);
+    setEditForm({
+      gate_type: gate.gate_type,
+      lease_type: gate.lease_type,
+      monthly_price: gate.monthly_price?.toString() || '',
+      hourly_price: gate.hourly_price?.toString() || '',
+    });
+    setEditError('');
+  }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingGate) return;
+    setEditError('');
+    setEditSubmitting(true);
+
+    const { error } = await supabase.from('gates').update({
+      gate_type: editForm.gate_type,
+      lease_type: editForm.lease_type,
+      monthly_price: editForm.monthly_price ? parseFloat(editForm.monthly_price) : null,
+      hourly_price: editForm.hourly_price ? parseFloat(editForm.hourly_price) : null,
+    }).eq('id', editingGate.id);
+
+    if (error) {
+      setEditError(error.message);
+    } else {
+      setEditingGate(null);
+      fetchData();
+    }
+    setEditSubmitting(false);
   }
 
   const filteredGates = useMemo(() => {
@@ -314,6 +358,13 @@ export default function Gates({ airports, isAdmin }: GatesProps) {
                       {isAdmin && (
                         <td className="px-4 py-2.5 text-right">
                           <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => openEditModal(gate)}
+                              className="p-1.5 text-slate-400 hover:text-sky-400 hover:bg-sky-400/10 rounded-lg transition-all"
+                              title="Edit gate costs"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
                             {gate.status === 'occupied' && (
                               <button
                                 onClick={() => releaseGate(gate.id)}
@@ -341,6 +392,108 @@ export default function Gates({ airports, isAdmin }: GatesProps) {
             </div>
           </div>
         ))
+      )}
+
+      {/* Edit Gate Modal */}
+      {editingGate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-sky-500/10 rounded-lg flex items-center justify-center">
+                  <Pencil className="w-4 h-4 text-sky-400" />
+                </div>
+                <div>
+                  <h2 className="text-white font-semibold">Edit Gate</h2>
+                  <p className="text-slate-400 text-xs">{editingGate.airport_icao} - {editingGate.gate_number}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingGate(null)}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={saveEdit} className="p-6 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1.5 font-medium">Gate Type</label>
+                  <select
+                    value={editForm.gate_type}
+                    onChange={e => setEditForm({ ...editForm, gate_type: e.target.value as GateType })}
+                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-sky-500/40 focus:border-sky-500 transition-all"
+                  >
+                    {Object.entries(GATE_TYPE_LABELS).map(([val, label]) => (
+                      <option key={val} value={val}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1.5 font-medium">Lease Type</label>
+                  <select
+                    value={editForm.lease_type}
+                    onChange={e => setEditForm({ ...editForm, lease_type: e.target.value as LeaseType })}
+                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-sky-500/40 focus:border-sky-500 transition-all"
+                  >
+                    {Object.entries(LEASE_TYPE_LABELS).map(([val, label]) => (
+                      <option key={val} value={val}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1.5 font-medium">Monthly Price ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={editForm.monthly_price}
+                    onChange={e => setEditForm({ ...editForm, monthly_price: e.target.value })}
+                    placeholder="e.g. 5000"
+                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 text-sm focus:ring-2 focus:ring-sky-500/40 focus:border-sky-500 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1.5 font-medium">Hourly Price ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={editForm.hourly_price}
+                    onChange={e => setEditForm({ ...editForm, hourly_price: e.target.value })}
+                    placeholder="e.g. 150"
+                    className="w-full px-3 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 text-sm focus:ring-2 focus:ring-sky-500/40 focus:border-sky-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              {editError && (
+                <div className="flex items-center gap-2 text-red-400 text-sm">
+                  <AlertCircle className="w-4 h-4" />
+                  {editError}
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={editSubmitting}
+                  className="flex-1 py-2.5 bg-sky-500 hover:bg-sky-400 disabled:bg-slate-600 text-white font-semibold text-sm rounded-lg transition-all"
+                >
+                  {editSubmitting ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingGate(null)}
+                  className="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm rounded-lg transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
