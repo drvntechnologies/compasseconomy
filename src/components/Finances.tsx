@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import type { AirlineFinancials, FinancialTransaction, MonthlyBillingLog, Aircraft, Gate, TransactionType } from '../lib/types';
-import { DollarSign, TrendingUp, Calendar, Filter, AlertCircle, CheckCircle, Banknote, Plane, DoorOpen, Wrench } from 'lucide-react';
+import { DollarSign, TrendingUp, Calendar, Filter, AlertCircle, CheckCircle, Banknote, Plane, DoorOpen, Wrench, Pencil, X } from 'lucide-react';
 
 interface FinancesProps {
   isAdmin: boolean;
@@ -32,6 +32,13 @@ export default function Finances({ isAdmin }: FinancesProps) {
   const [processingMonthly, setProcessingMonthly] = useState(false);
   const [monthlyError, setMonthlyError] = useState('');
   const [monthlySuccess, setMonthlySuccess] = useState('');
+
+  // Edit transaction state
+  const [editingTx, setEditingTx] = useState<FinancialTransaction | null>(null);
+  const [editAmount, setEditAmount] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editError, setEditError] = useState('');
+  const [editSubmitting, setEditSubmitting] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -159,6 +166,55 @@ export default function Finances({ isAdmin }: FinancesProps) {
 
     setMonthlySuccess(`Processed ${billingMonth}: ${formatCurrency(gateFees)} gate fees + ${formatCurrency(leaseFees)} aircraft leases = ${formatCurrency(totalDebit)} total deducted.`);
     setProcessingMonthly(false);
+    fetchData();
+  }
+
+  function openEditTx(tx: FinancialTransaction) {
+    setEditingTx(tx);
+    setEditAmount(tx.amount.toString());
+    setEditDescription(tx.description);
+    setEditError('');
+  }
+
+  async function saveEditTx(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingTx) return;
+    const newAmount = parseFloat(editAmount);
+    if (isNaN(newAmount)) {
+      setEditError('Amount must be a valid number.');
+      return;
+    }
+    if (!editDescription.trim()) {
+      setEditError('Description is required.');
+      return;
+    }
+    setEditSubmitting(true);
+    setEditError('');
+
+    const amountDiff = newAmount - editingTx.amount;
+
+    const { error } = await supabase.from('financial_transactions').update({
+      amount: newAmount,
+      description: editDescription.trim(),
+    }).eq('id', editingTx.id);
+
+    if (error) {
+      setEditError(error.message);
+      setEditSubmitting(false);
+      return;
+    }
+
+    // Adjust airline balance by the difference
+    if (amountDiff !== 0 && financials) {
+      const newBalance = financials.balance_usd + amountDiff;
+      await supabase.from('airline_financials').update({
+        balance_usd: newBalance,
+        updated_at: new Date().toISOString(),
+      }).eq('id', 1);
+    }
+
+    setEditingTx(null);
+    setEditSubmitting(false);
     fetchData();
   }
 
@@ -331,12 +387,102 @@ export default function Finances({ isAdmin }: FinancesProps) {
                   <span className={`text-sm font-mono font-semibold shrink-0 ${isCredit ? 'text-emerald-400' : 'text-red-400'}`}>
                     {isCredit ? '+' : ''}{formatCurrencyFull(tx.amount)}
                   </span>
+                  {isAdmin && (
+                    <button
+                      onClick={() => openEditTx(tx)}
+                      className="p-1.5 text-slate-500 hover:text-sky-400 hover:bg-sky-400/10 rounded-lg transition-all shrink-0"
+                      title="Edit transaction"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
       </div>
+
+      {/* Edit Transaction Modal */}
+      {editingTx && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-sky-500/10 rounded-lg flex items-center justify-center">
+                  <Pencil className="w-4 h-4 text-sky-400" />
+                </div>
+                <div>
+                  <h2 className="text-white font-semibold">Edit Transaction</h2>
+                  <p className="text-slate-400 text-xs">
+                    {TYPE_STYLES[editingTx.type].label} - {new Date(editingTx.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingTx(null)}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={saveEditTx} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1.5 font-medium">Amount (negative = debit, positive = credit)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editAmount}
+                  onChange={e => setEditAmount(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-sky-500/40 focus:border-sky-500 transition-all font-mono"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Original: {formatCurrencyFull(editingTx.amount)}
+                  {editAmount && !isNaN(parseFloat(editAmount)) && parseFloat(editAmount) !== editingTx.amount && (
+                    <span className="ml-2 text-amber-400">
+                      Balance change: {formatCurrencyFull(parseFloat(editAmount) - editingTx.amount)}
+                    </span>
+                  )}
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1.5 font-medium">Description</label>
+                <input
+                  type="text"
+                  value={editDescription}
+                  onChange={e => setEditDescription(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-sky-500/40 focus:border-sky-500 transition-all"
+                />
+              </div>
+
+              {editError && (
+                <div className="flex items-center gap-2 text-red-400 text-sm">
+                  <AlertCircle className="w-4 h-4" />
+                  {editError}
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={editSubmitting}
+                  className="flex-1 py-2.5 bg-sky-500 hover:bg-sky-400 disabled:bg-slate-600 text-white font-semibold text-sm rounded-lg transition-all"
+                >
+                  {editSubmitting ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingTx(null)}
+                  className="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm rounded-lg transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
