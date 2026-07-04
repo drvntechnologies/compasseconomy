@@ -613,5 +613,4 @@ export default function Acars({ currentUserId }: AcarsProps) {
   );
 }
 
-
 export default Acars
