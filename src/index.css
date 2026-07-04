@@ -891,3 +891,777 @@ body {
   background: var(--w98-highlight) !important;
   color: var(--w98-highlight-text) !important;
 }
+
+/* ============================================
+   WINDOWS 7 AERO THEME
+   ============================================ */
+
+.win7 {
+  --w7-glass: rgba(200, 220, 240, 0.72);
+  --w7-glass-dark: rgba(40, 60, 90, 0.85);
+  --w7-glass-border: rgba(255, 255, 255, 0.45);
+  --w7-glass-shadow: rgba(0, 0, 0, 0.25);
+  --w7-titlebar: linear-gradient(180deg, #4a8fcc 0%, #2a6aaa 50%, #1a5090 100%);
+  --w7-titlebar-inactive: linear-gradient(180deg, #a0b0c0 0%, #8090a0 100%);
+  --w7-button: linear-gradient(180deg, #f0f4f8 0%, #dde4ec 40%, #c8d4e0 100%);
+  --w7-button-hover: linear-gradient(180deg, #e8f0f8 0%, #c8daf0 40%, #a8c4e4 100%);
+  --w7-button-active: linear-gradient(180deg, #b0c4d8 0%, #98b4cc 40%, #80a4c0 100%);
+  --w7-accent: #3d7bbf;
+  --w7-accent-light: #5a9bd5;
+  --w7-text: #1e1e1e;
+  --w7-text-secondary: #4a4a5a;
+  --w7-text-muted: #7a7a8a;
+  --w7-field: #ffffff;
+  --w7-field-border: #abadb3;
+  --w7-field-focus: #569de5;
+  --w7-desktop: linear-gradient(135deg, #1a3a5c 0%, #2d5a87 30%, #1e4c7a 60%, #0f2d4a 100%);
+  --w7-taskbar: rgba(20, 40, 70, 0.88);
+  --w7-panel: rgba(240, 244, 248, 0.92);
+  --w7-panel-border: rgba(160, 180, 200, 0.6);
+  --w7-success: #2d9b2d;
+  --w7-error: #c42b1c;
+  --w7-warning: #d68a00;
+  --w7-separator: rgba(0, 0, 0, 0.08);
+}
+
+/* Font */
+.win7,
+.win7 * {
+  font-family: 'Segoe UI', 'Tahoma', 'Arial', sans-serif !important;
+}
+
+/* Desktop background */
+.win7 body {
+  background: var(--w7-desktop) !important;
+}
+
+.win7 .min-h-screen.bg-slate-900,
+.win7 .bg-slate-900 {
+  background: transparent !important;
+}
+
+.win7 .min-h-screen.flex {
+  background: linear-gradient(135deg, #1a3a5c 0%, #2d5a87 30%, #1e4c7a 60%, #0f2d4a 100%) !important;
+}
+
+/* Sidebar = Glass taskbar */
+.win7 aside {
+  background: var(--w7-taskbar) !important;
+  backdrop-filter: blur(20px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
+  border-right: 1px solid rgba(100, 140, 200, 0.35) !important;
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.08), 2px 0 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+.win7 aside .border-b,
+.win7 aside .border-t {
+  border-color: rgba(100, 140, 200, 0.2) !important;
+}
+
+/* Logo area = Aero title bar */
+.win7 aside > div:first-child {
+  background: linear-gradient(180deg, rgba(80, 130, 200, 0.4) 0%, rgba(40, 80, 140, 0.3) 100%) !important;
+  border-bottom: 1px solid rgba(100, 160, 220, 0.3) !important;
+}
+
+.win7 aside > div:first-child h1 {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
+}
+
+.win7 aside > div:first-child p {
+  color: rgba(200, 220, 255, 0.8) !important;
+}
+
+.win7 aside > div:first-child .bg-sky-500\/10 {
+  background: rgba(80, 150, 220, 0.25) !important;
+  border: 1px solid rgba(100, 170, 240, 0.3) !important;
+}
+
+.win7 aside > div:first-child svg {
+  color: #a8d4ff !important;
+}
+
+/* Nav buttons = Aero glass buttons */
+.win7 nav button {
+  background: transparent !important;
+  color: rgba(220, 235, 255, 0.9) !important;
+  border: 1px solid transparent !important;
+  border-radius: 3px !important;
+  padding: 6px 10px !important;
+  margin-bottom: 1px !important;
+  transition: all 0.15s ease !important;
+}
+
+.win7 nav button:hover {
+  background: rgba(100, 160, 230, 0.2) !important;
+  border-color: rgba(120, 180, 240, 0.3) !important;
+  color: #ffffff !important;
+}
+
+.win7 nav button:active {
+  background: rgba(60, 120, 200, 0.35) !important;
+}
+
+.win7 nav button svg {
+  color: rgba(180, 210, 255, 0.85) !important;
+}
+
+/* Active nav item = highlighted glass */
+.win7 nav button.bg-sky-500\/10,
+.win7 nav button[class*="bg-sky"] {
+  background: rgba(80, 150, 230, 0.3) !important;
+  border-color: rgba(100, 170, 240, 0.4) !important;
+  box-shadow: inset 0 0 8px rgba(100, 180, 255, 0.15), 0 0 4px rgba(80, 150, 230, 0.2) !important;
+  color: #ffffff !important;
+}
+
+.win7 nav button.bg-sky-500\/10 svg,
+.win7 nav button[class*="bg-sky"] svg {
+  color: #a8d4ff !important;
+}
+
+.win7 nav button .text-sky-400 {
+  color: #a8d4ff !important;
+}
+
+/* Clock area */
+.win7 aside .font-mono {
+  color: rgba(200, 220, 240, 0.9) !important;
+}
+
+.win7 aside .text-cyan-400,
+.win7 aside .text-cyan-600 {
+  color: #7ec8f0 !important;
+}
+
+.win7 aside .text-slate-300,
+.win7 aside .text-slate-400,
+.win7 aside .text-slate-500,
+.win7 aside .text-slate-600 {
+  color: rgba(180, 200, 225, 0.75) !important;
+}
+
+/* Collapse / theme buttons */
+.win7 aside > div:last-child button {
+  background: transparent !important;
+  color: rgba(180, 200, 225, 0.8) !important;
+  border: 1px solid transparent !important;
+  border-radius: 3px !important;
+  padding: 4px 8px !important;
+}
+
+.win7 aside > div:last-child button:hover {
+  background: rgba(100, 160, 230, 0.2) !important;
+  border-color: rgba(120, 180, 240, 0.25) !important;
+  color: #ffffff !important;
+}
+
+.win7 aside > div:last-child svg {
+  color: rgba(180, 200, 225, 0.8) !important;
+}
+
+/* User section */
+.win7 aside .bg-slate-700 {
+  background: rgba(60, 100, 160, 0.25) !important;
+  border: 1px solid rgba(100, 150, 210, 0.2) !important;
+  border-radius: 4px !important;
+}
+
+.win7 aside .text-white {
+  color: rgba(230, 240, 255, 0.95) !important;
+}
+
+/* Mobile header bar */
+.win7 .fixed.top-0.bg-slate-800 {
+  background: var(--w7-taskbar) !important;
+  backdrop-filter: blur(20px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
+  border-bottom: 1px solid rgba(100, 140, 200, 0.3) !important;
+}
+
+/* Main content area = Aero glass window */
+.win7 main {
+  background: transparent !important;
+  padding: 8px !important;
+}
+
+.win7 main > div {
+  background: var(--w7-panel) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid var(--w7-panel-border) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.12), 0 0 1px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.7) !important;
+  padding: 12px !important;
+}
+
+/* Content panels = Vista/7 grouped boxes */
+.win7 .bg-slate-800,
+.win7 .bg-slate-800\/50 {
+  background: rgba(255, 255, 255, 0.6) !important;
+  border: 1px solid rgba(180, 200, 220, 0.5) !important;
+  border-radius: 4px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+}
+
+.win7 .bg-slate-900\/50 {
+  background: rgba(245, 248, 252, 0.75) !important;
+  border: 1px solid rgba(180, 200, 220, 0.4) !important;
+  border-radius: 4px !important;
+}
+
+/* Card containers */
+.win7 .bg-slate-700,
+.win7 .bg-slate-700\/50,
+.win7 .bg-slate-700\/20 {
+  background: rgba(255, 255, 255, 0.5) !important;
+  border: 1px solid rgba(180, 200, 220, 0.45) !important;
+  border-radius: 4px !important;
+}
+
+.win7 .bg-slate-600 {
+  background: rgba(200, 215, 230, 0.6) !important;
+}
+
+/* Text colors */
+.win7 .text-white {
+  color: var(--w7-text) !important;
+}
+
+.win7 .text-slate-300 {
+  color: var(--w7-text-secondary) !important;
+}
+
+.win7 .text-slate-200,
+.win7 .text-slate-100 {
+  color: var(--w7-text) !important;
+}
+
+.win7 .text-slate-400 {
+  color: var(--w7-text-secondary) !important;
+}
+
+.win7 .text-slate-500,
+.win7 .text-slate-600 {
+  color: var(--w7-text-muted) !important;
+}
+
+.win7 .text-sky-400,
+.win7 .text-sky-300,
+.win7 .text-sky-500 {
+  color: var(--w7-accent) !important;
+}
+
+.win7 .text-emerald-400,
+.win7 .text-emerald-300,
+.win7 .text-emerald-500 {
+  color: var(--w7-success) !important;
+}
+
+.win7 .text-green-400,
+.win7 .text-green-300,
+.win7 .text-green-500 {
+  color: #2d8c2d !important;
+}
+
+.win7 .text-red-400,
+.win7 .text-red-300,
+.win7 .text-red-500 {
+  color: var(--w7-error) !important;
+}
+
+.win7 .text-amber-400,
+.win7 .text-amber-300,
+.win7 .text-yellow-400,
+.win7 .text-yellow-300 {
+  color: var(--w7-warning) !important;
+}
+
+.win7 .text-violet-400,
+.win7 .text-violet-300,
+.win7 .text-purple-400 {
+  color: #6b3fa0 !important;
+}
+
+.win7 .text-cyan-400,
+.win7 .text-cyan-300,
+.win7 .text-cyan-600,
+.win7 .text-cyan-500 {
+  color: #1a8a9a !important;
+}
+
+.win7 .text-teal-400,
+.win7 .text-teal-300 {
+  color: #1a7a7a !important;
+}
+
+.win7 .text-orange-400,
+.win7 .text-orange-300,
+.win7 .text-orange-500 {
+  color: #c05a00 !important;
+}
+
+/* Placeholder text */
+.win7 input::placeholder,
+.win7 textarea::placeholder {
+  color: var(--w7-text-muted) !important;
+}
+
+/* Buttons = Aero glass buttons */
+.win7 button:not(nav button) {
+  background: var(--w7-button) !important;
+  color: var(--w7-text) !important;
+  border: 1px solid rgba(150, 165, 180, 0.7) !important;
+  border-radius: 3px !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.85) !important;
+  padding: 5px 14px !important;
+  font-size: 12px !important;
+  transition: all 0.1s ease !important;
+}
+
+.win7 button:not(nav button):hover {
+  background: var(--w7-button-hover) !important;
+  border-color: rgba(100, 150, 210, 0.6) !important;
+  box-shadow: 0 1px 4px rgba(60, 130, 210, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+}
+
+.win7 button:not(nav button):active {
+  background: var(--w7-button-active) !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+}
+
+.win7 button:disabled {
+  opacity: 0.5 !important;
+  color: var(--w7-text-muted) !important;
+}
+
+/* Sky/blue action buttons = Blue Aero primary button */
+.win7 .bg-sky-500,
+.win7 .bg-sky-600,
+.win7 .bg-sky-400 {
+  background: linear-gradient(180deg, #5aade0 0%, #3d8cc8 40%, #2a70aa 100%) !important;
+  color: #ffffff !important;
+  border-color: #2060a0 !important;
+  box-shadow: 0 1px 3px rgba(30, 80, 140, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
+}
+
+.win7 .bg-sky-500:hover,
+.win7 .bg-sky-600:hover,
+.win7 .bg-sky-400:hover {
+  background: linear-gradient(180deg, #6abdf0 0%, #4d9cd8 40%, #3a80ba 100%) !important;
+}
+
+.win7 .bg-sky-500\/10 {
+  background: rgba(60, 140, 210, 0.08) !important;
+  border: 1px solid rgba(60, 140, 210, 0.2) !important;
+}
+
+/* Emerald action buttons */
+.win7 .bg-emerald-500,
+.win7 .bg-emerald-600 {
+  background: linear-gradient(180deg, #4ab84a 0%, #2d9b2d 40%, #1f801f 100%) !important;
+  color: #ffffff !important;
+  border-color: #1a6a1a !important;
+}
+
+.win7 .bg-emerald-500\/10 {
+  background: rgba(45, 155, 45, 0.08) !important;
+  border: 1px solid rgba(45, 155, 45, 0.2) !important;
+}
+
+/* Green */
+.win7 .bg-green-500,
+.win7 .bg-green-600,
+.win7 .bg-green-500\/20 {
+  background: linear-gradient(180deg, #3ea83e 0%, #2d8c2d 100%) !important;
+  color: #ffffff !important;
+}
+
+/* Red / destructive */
+.win7 .bg-red-500,
+.win7 .bg-red-600 {
+  background: linear-gradient(180deg, #e04030 0%, #c42b1c 40%, #a01f14 100%) !important;
+  color: #ffffff !important;
+  border-color: #8a1a10 !important;
+}
+
+.win7 .bg-red-500\/10,
+.win7 .bg-red-500\/20 {
+  background: rgba(196, 43, 28, 0.08) !important;
+  border: 1px solid rgba(196, 43, 28, 0.2) !important;
+}
+
+/* Teal */
+.win7 .bg-teal-600,
+.win7 .bg-teal-500 {
+  background: linear-gradient(180deg, #30a0a0 0%, #1a8080 100%) !important;
+  color: #ffffff !important;
+}
+
+.win7 .bg-teal-500\/10 {
+  background: rgba(26, 128, 128, 0.08) !important;
+  border: 1px solid rgba(26, 128, 128, 0.2) !important;
+}
+
+/* Amber */
+.win7 .bg-amber-500,
+.win7 .bg-amber-600 {
+  background: linear-gradient(180deg, #f0a000 0%, #d68a00 100%) !important;
+  color: #ffffff !important;
+}
+
+.win7 .bg-amber-500\/10,
+.win7 .bg-amber-500\/20 {
+  background: rgba(214, 138, 0, 0.08) !important;
+}
+
+/* Orange */
+.win7 .bg-orange-500,
+.win7 .bg-orange-600,
+.win7 .bg-orange-500\/20 {
+  background: rgba(192, 90, 0, 0.15) !important;
+}
+
+/* Violet */
+.win7 .bg-violet-500,
+.win7 .bg-violet-600,
+.win7 .bg-violet-500\/10,
+.win7 .bg-violet-500\/20 {
+  background: rgba(107, 63, 160, 0.08) !important;
+  border: 1px solid rgba(107, 63, 160, 0.2) !important;
+}
+
+/* Cyan */
+.win7 .bg-cyan-500,
+.win7 .bg-cyan-600,
+.win7 .bg-cyan-500\/10,
+.win7 .bg-cyan-500\/20 {
+  background: rgba(26, 138, 154, 0.08) !important;
+  border: 1px solid rgba(26, 138, 154, 0.2) !important;
+}
+
+/* Slate phase badges */
+.win7 .bg-slate-500\/20 {
+  background: rgba(100, 116, 139, 0.1) !important;
+  border: 1px solid rgba(100, 116, 139, 0.2) !important;
+}
+
+/* Inputs & selects = Aero text fields */
+.win7 input,
+.win7 select,
+.win7 textarea {
+  background: var(--w7-field) !important;
+  color: var(--w7-text) !important;
+  border: 1px solid var(--w7-field-border) !important;
+  border-radius: 3px !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.07) !important;
+  font-size: 12px !important;
+  padding: 5px 8px !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.win7 input:focus,
+.win7 select:focus,
+.win7 textarea:focus {
+  border-color: var(--w7-field-focus) !important;
+  box-shadow: 0 0 0 1px rgba(86, 157, 229, 0.3), inset 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+  outline: none !important;
+}
+
+/* Tables = Vista/7 list view */
+.win7 table {
+  border: 1px solid rgba(180, 200, 220, 0.5) !important;
+  border-radius: 4px !important;
+  background: var(--w7-field) !important;
+  overflow: hidden !important;
+}
+
+.win7 th {
+  background: linear-gradient(180deg, #f8fafb 0%, #e8eef4 100%) !important;
+  color: var(--w7-text) !important;
+  border-bottom: 1px solid rgba(180, 200, 220, 0.5) !important;
+  border-right: 1px solid rgba(200, 215, 230, 0.4) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  padding: 6px 10px !important;
+}
+
+.win7 td {
+  color: var(--w7-text) !important;
+  border-bottom: 1px solid rgba(230, 235, 240, 0.8) !important;
+  font-size: 12px !important;
+  padding: 5px 10px !important;
+}
+
+.win7 tr:hover td {
+  background: rgba(80, 150, 230, 0.06) !important;
+}
+
+/* Borders */
+.win7 .border-slate-700,
+.win7 .border-slate-700\/50,
+.win7 .border-slate-600,
+.win7 .border-slate-500,
+.win7 .border-red-500\/20 {
+  border-color: rgba(180, 200, 220, 0.5) !important;
+}
+
+/* Dividers */
+.win7 .divide-slate-700\/50 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgba(180, 200, 220, 0.4) !important;
+}
+
+/* Headers */
+.win7 h1, .win7 h2, .win7 h3, .win7 h4 {
+  color: var(--w7-text) !important;
+}
+
+.win7 h1 {
+  color: var(--w7-accent) !important;
+}
+
+/* Gradients - convert to Aero style */
+.win7 [class*="bg-gradient"],
+.win7 .bg-gradient-to-r,
+.win7 .bg-gradient-to-l,
+.win7 .bg-gradient-to-b,
+.win7 .bg-gradient-to-t,
+.win7 .bg-gradient-to-br {
+  background: linear-gradient(135deg, rgba(80, 150, 230, 0.08) 0%, rgba(60, 120, 200, 0.04) 100%) !important;
+  border: 1px solid rgba(80, 150, 230, 0.15) !important;
+  border-radius: 4px !important;
+}
+
+/* Badges and chips */
+.win7 [class*="bg-sky-500\/10"],
+.win7 [class*="bg-emerald-500\/10"],
+.win7 [class*="bg-violet-500\/10"],
+.win7 [class*="bg-amber-500\/10"],
+.win7 [class*="bg-red-500\/10"],
+.win7 [class*="bg-cyan-500\/10"],
+.win7 [class*="bg-teal-500\/10"],
+.win7 [class*="bg-orange-500\/10"],
+.win7 [class*="bg-green-500\/10"],
+.win7 [class*="bg-slate-500\/10"] {
+  border-radius: 3px !important;
+  padding: 2px 6px !important;
+}
+
+.win7 [class*="bg-sky-500\/20"],
+.win7 [class*="bg-emerald-500\/20"],
+.win7 [class*="bg-violet-500\/20"],
+.win7 [class*="bg-amber-500\/20"],
+.win7 [class*="bg-red-500\/20"],
+.win7 [class*="bg-cyan-500\/20"],
+.win7 [class*="bg-teal-500\/20"],
+.win7 [class*="bg-orange-500\/20"],
+.win7 [class*="bg-green-500\/20"],
+.win7 [class*="bg-slate-500\/20"] {
+  border-radius: 3px !important;
+}
+
+/* Scrollbars = Aero scrollbars */
+.win7 ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.win7 ::-webkit-scrollbar-track {
+  background: rgba(240, 244, 248, 0.8);
+  border-left: 1px solid rgba(200, 210, 220, 0.4);
+}
+
+.win7 ::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, #c0c8d0 0%, #a8b4c0 100%);
+  border: 1px solid rgba(160, 175, 190, 0.5);
+  border-radius: 5px;
+}
+
+.win7 ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(90deg, #a8b4c0 0%, #90a0b0 100%);
+}
+
+/* Modals = Aero dialogs */
+.win7 .fixed.inset-0 .bg-slate-800 {
+  background: var(--w7-panel) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid var(--w7-panel-border) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), 0 0 1px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.7) !important;
+}
+
+.win7 .bg-black\/60 {
+  background: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(3px) !important;
+}
+
+/* Shadows - Aero style */
+.win7 .shadow-lg,
+.win7 .shadow-xl,
+.win7 .shadow-2xl,
+.win7 .shadow-md {
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1), 0 0 1px rgba(0, 0, 0, 0.08) !important;
+}
+
+.win7 [class*="shadow-sky"],
+.win7 [class*="shadow-emerald"],
+.win7 [class*="shadow-teal"],
+.win7 [class*="shadow-red"] {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Auth page = Aero login */
+.win7 .min-h-screen.flex.items-center {
+  background: linear-gradient(135deg, #1a3a5c 0%, #2d5a87 30%, #1e4c7a 60%, #0f2d4a 100%) !important;
+}
+
+.win7 .min-h-screen.flex.items-center .bg-slate-800 {
+  background: var(--w7-panel) !important;
+  backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(200, 220, 240, 0.5) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+}
+
+.win7 .min-h-screen.flex.items-center .bg-sky-500\/10 {
+  background: rgba(60, 140, 220, 0.1) !important;
+  border: 1px solid rgba(60, 140, 220, 0.2) !important;
+  border-radius: 50% !important;
+}
+
+.win7 .min-h-screen.flex.items-center .bg-slate-900 {
+  background: rgba(200, 215, 230, 0.5) !important;
+  border-radius: 4px !important;
+}
+
+/* Ring overrides */
+.win7 .ring-1,
+.win7 .ring-2,
+.win7 [class*="ring-sky"],
+.win7 [class*="ring-emerald"],
+.win7 [class*="ring-cyan"],
+.win7 [class*="ring-amber"],
+.win7 [class*="ring-red"] {
+  --tw-ring-shadow: none !important;
+}
+
+/* Focus ring - Aero glow */
+.win7 *:focus {
+  outline: none !important;
+}
+
+.win7 input:focus,
+.win7 select:focus,
+.win7 textarea:focus {
+  border-color: var(--w7-field-focus) !important;
+  box-shadow: 0 0 0 1px rgba(86, 157, 229, 0.3), inset 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+}
+
+.win7 button:focus {
+  box-shadow: 0 0 0 2px rgba(86, 157, 229, 0.35), 0 1px 2px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.85) !important;
+}
+
+/* Progress bars */
+.win7 .h-1\.5,
+.win7 .h-2 {
+  background: rgba(200, 215, 230, 0.4) !important;
+  border-radius: 4px !important;
+}
+
+.win7 .overflow-hidden .h-full[class*="bg-"] {
+  background: linear-gradient(180deg, #5aade0 0%, #3d8cc8 100%) !important;
+  border-radius: 4px !important;
+}
+
+/* Hover states */
+.win7 .hover\:bg-slate-700\/50:hover,
+.win7 .hover\:bg-slate-700:hover,
+.win7 .hover\:bg-slate-600:hover {
+  background: rgba(80, 150, 230, 0.08) !important;
+}
+
+.win7 .hover\:text-white:hover,
+.win7 .hover\:text-sky-400:hover {
+  color: var(--w7-accent) !important;
+}
+
+.win7 .hover\:bg-sky-400:hover {
+  background: linear-gradient(180deg, #6abdf0 0%, #4d9cd8 40%, #3a80ba 100%) !important;
+}
+
+/* Status dot indicators */
+.win7 .w-1\.5.h-1\.5.bg-emerald-500,
+.win7 .w-2.h-2.bg-emerald-500 {
+  background: var(--w7-success) !important;
+  border-radius: 50% !important;
+  box-shadow: 0 0 4px rgba(45, 155, 45, 0.4) !important;
+}
+
+/* SearchableSelect dropdown */
+.win7 .absolute.z-50 {
+  background: var(--w7-field) !important;
+  border: 1px solid var(--w7-field-border) !important;
+  border-radius: 4px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 0 1px rgba(0, 0, 0, 0.08) !important;
+}
+
+.win7 .absolute.z-50 button:hover {
+  background: rgba(60, 130, 210, 0.12) !important;
+  color: var(--w7-text) !important;
+}
+
+/* Rounded corners preserved */
+.win7 [class*="rounded-lg"] {
+  border-radius: 4px !important;
+}
+
+.win7 [class*="rounded-xl"],
+.win7 [class*="rounded-2xl"] {
+  border-radius: 6px !important;
+}
+
+.win7 [class*="rounded-full"] {
+  border-radius: 9999px !important;
+}
+
+/* Animations - keep but soften */
+.win7 .transition-all,
+.win7 .transition-colors,
+.win7 .transition {
+  transition-duration: 0.15s !important;
+}
+
+.win7 .animate-pulse {
+  animation: win7-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite !important;
+}
+
+@keyframes win7-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* Font sizes - slightly larger than W98 */
+.win7 .text-xs { font-size: 11px !important; }
+.win7 .text-sm { font-size: 12px !important; }
+.win7 .text-base { font-size: 13px !important; }
+.win7 .text-lg { font-size: 14px !important; }
+.win7 .text-xl { font-size: 16px !important; }
+.win7 .text-2xl { font-size: 18px !important; }
+.win7 .text-3xl { font-size: 22px !important; }
+
+/* Separator / subtle border */
+.win7 .border-b {
+  border-bottom-color: var(--w7-separator) !important;
+}
+
+/* Backdrop blur for existing blurred elements - Aero glass */
+.win7 .backdrop-blur-sm,
+.win7 .backdrop-blur-md,
+.win7 .backdrop-blur-lg,
+.win7 .backdrop-blur-xl {
+  backdrop-filter: blur(16px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.4) !important;
+}

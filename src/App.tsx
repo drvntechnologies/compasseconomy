@@ -11,7 +11,7 @@ import Fleet from './components/Fleet';
 import Gates from './components/Gates';
 import Finances from './components/Finances';
 import Acars from './components/Acars';
-import { Plane, LogOut, LayoutDashboard, Settings, Users, Navigation, Clock, Gauge, Radio, Radar, PanelLeftClose, PanelLeft, DoorOpen, DollarSign, KeyRound, Sun, Moon, Monitor, Menu, X } from 'lucide-react';
+import { Plane, LogOut, LayoutDashboard, Settings, Users, Navigation, Clock, Gauge, Radio, Radar, PanelLeftClose, PanelLeft, DoorOpen, DollarSign, KeyRound, Sun, Moon, Monitor, Laptop, Menu, X } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 
 export default function App() {
@@ -36,6 +36,9 @@ export default function App() {
   const [win98Mode, setWin98Mode] = useState(() => {
     return localStorage.getItem('win98') === 'true';
   });
+  const [win7Mode, setWin7Mode] = useState(() => {
+    return localStorage.getItem('win7') === 'true';
+  });
   const intervalRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -55,6 +58,15 @@ export default function App() {
     }
     localStorage.setItem('win98', win98Mode ? 'true' : 'false');
   }, [win98Mode]);
+
+  useEffect(() => {
+    if (win7Mode) {
+      document.documentElement.classList.add('win7');
+    } else {
+      document.documentElement.classList.remove('win7');
+    }
+    localStorage.setItem('win7', win7Mode ? 'true' : 'false');
+  }, [win7Mode]);
 
   useEffect(() => {
     intervalRef.current = window.setInterval(() => setNow(new Date()), 1000);
@@ -299,14 +311,24 @@ export default function App() {
         {/* Theme + Collapse toggle */}
         <div className="px-3 py-2 border-t border-slate-700 shrink-0 flex items-center gap-1 overflow-hidden">
           <button
-            onClick={() => setWin98Mode(!win98Mode)}
+            onClick={() => { setWin98Mode(!win98Mode); if (!win98Mode) setWin7Mode(false); }}
             className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs transition-all shrink-0 ${
               win98Mode ? 'text-teal-400 bg-teal-500/10' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-700/50'
             }`}
             title={win98Mode ? 'Disable retro mode' : 'Enable Windows 98 mode'}
           >
             <Monitor className="w-4 h-4" />
-            {!sidebarCollapsed && <span>{win98Mode ? 'W98' : 'W98'}</span>}
+            {!sidebarCollapsed && <span>W98</span>}
+          </button>
+          <button
+            onClick={() => { setWin7Mode(!win7Mode); if (!win7Mode) setWin98Mode(false); }}
+            className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs transition-all shrink-0 ${
+              win7Mode ? 'text-sky-400 bg-sky-500/10' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-700/50'
+            }`}
+            title={win7Mode ? 'Disable Aero mode' : 'Enable Windows 7 mode'}
+          >
+            <Laptop className="w-4 h-4" />
+            {!sidebarCollapsed && <span>W7</span>}
           </button>
           <button
             onClick={() => setDarkMode(!darkMode)}
