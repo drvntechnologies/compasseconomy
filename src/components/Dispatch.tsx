@@ -8,6 +8,7 @@ interface DispatchProps {
   airports: Airport[];
   routes: Route[];
   currentUserId: string | null;
+  isAdmin?: boolean;
 }
 
 const SIZE_HIERARCHY: SizeCategory[] = ['ramp', 'small', 'medium', 'heavy'];
@@ -17,7 +18,7 @@ function getCompatibleGateTypes(aircraftSize: SizeCategory): SizeCategory[] {
   return SIZE_HIERARCHY.slice(idx);
 }
 
-export default function Dispatch({ airports, routes, currentUserId }: DispatchProps) {
+export default function Dispatch({ airports, routes, currentUserId, isAdmin }: DispatchProps) {
   const [bookings, setBookings] = useState<FlightBooking[]>([]);
   const [bookedPaxMap, setBookedPaxMap] = useState<Record<string, PaxPool[]>>({});
   const [loading, setLoading] = useState(true);
@@ -1020,9 +1021,14 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
                       })()}
                     </div>
 
-                    {/* Actions - only show to booking owner */}
-                    {currentUserId && booking.user_id === currentUserId && (
+                    {/* Actions - show to booking owner or admins */}
+                    {currentUserId && (booking.user_id === currentUserId || isAdmin) && (
                     <div className="flex flex-row lg:flex-col gap-2 shrink-0 flex-wrap">
+                      {isAdmin && booking.user_id !== currentUserId && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 font-medium self-start">
+                          ADMIN ACTION
+                        </span>
+                      )}
                       {!assignedGate && (
                         <button
                           onClick={() => requestGate(booking.id)}

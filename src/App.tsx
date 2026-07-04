@@ -364,7 +364,7 @@ export default function App() {
           )}
 
           {activeView === 'dispatch' && (
-            <Dispatch airports={airports} routes={routes} currentUserId={session?.user?.id || null} />
+            <Dispatch airports={airports} routes={routes} currentUserId={session?.user?.id || null} isAdmin={isAdmin} />
           )}
 
           {activeView === 'fleet' && (
