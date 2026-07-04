@@ -105,6 +105,7 @@ export interface Gate {
   assigned_aircraft_id: string | null;
   assigned_booking_id: string | null;
   occupied_since: string | null;
+  last_billed_at: string | null;
   created_at: string;
 }
 

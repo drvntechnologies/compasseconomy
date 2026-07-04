@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Gate, Airport, GateType, LeaseType, Aircraft } from '../lib/types';
-import { DoorOpen, Plus, Trash2, Filter, AlertCircle, Plane, Pencil, X } from 'lucide-react';
+import { DoorOpen, Plus, Trash2, Filter, AlertCircle, Plane, Pencil, X, DollarSign } from 'lucide-react';
 
 interface GatesProps {
   airports: Airport[];
@@ -26,6 +26,7 @@ export default function Gates({ airports, isAdmin }: GatesProps) {
   const [aircraft, setAircraft] = useState<Aircraft[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterAirport, setFilterAirport] = useState('');
+  const [tick, setTick] = useState(0);
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [newGate, setNewGate] = useState({
@@ -55,6 +56,23 @@ export default function Gates({ airports, isAdmin }: GatesProps) {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Tick every 30s to update accrued cost displays
+  useEffect(() => {
+    const interval = setInterval(() => setTick(t => t + 1), 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const getAccruedCost = useCallback((gate: Gate): { cost: number; minutes: number } | null => {
+    if (gate.lease_type !== 'per_hour' || !gate.hourly_price || gate.status !== 'occupied' || !gate.occupied_since) return null;
+    const billingStart = gate.last_billed_at || gate.occupied_since;
+    const minutesSinceStart = (Date.now() - new Date(billingStart).getTime()) / 60000;
+    const totalMinutesSinceOccupied = (Date.now() - new Date(gate.occupied_since).getTime()) / 60000;
+    const tenMinBlocks = Math.ceil(minutesSinceStart / 10);
+    const cost = tenMinBlocks * (gate.hourly_price / 6);
+    return { cost, minutes: Math.round(totalMinutesSinceOccupied) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tick]);
 
   async function fetchData() {
     setLoading(true);
@@ -100,11 +118,39 @@ export default function Gates({ airports, isAdmin }: GatesProps) {
   }
 
   async function releaseGate(id: string) {
+    const gate = gates.find(g => g.id === id);
+    // Bill per-hour gate fees before releasing
+    if (gate && gate.lease_type === 'per_hour' && gate.hourly_price && gate.occupied_since) {
+      const billingStart = gate.last_billed_at || gate.occupied_since;
+      const minutesParked = (Date.now() - new Date(billingStart).getTime()) / 60000;
+      const tenMinBlocks = Math.ceil(minutesParked / 10);
+      const fee = tenMinBlocks * (gate.hourly_price / 6);
+      if (fee > 0) {
+        await supabase.from('financial_transactions').insert({
+          type: 'gate_fee',
+          amount: -fee,
+          description: `Gate ${gate.gate_number} at ${gate.airport_icao}: ${tenMinBlocks * 10}min @ $${gate.hourly_price}/hr (manual release)`,
+          reference_id: gate.id,
+        });
+        const { data: financials } = await supabase
+          .from('airline_financials')
+          .select('*')
+          .eq('id', 1)
+          .maybeSingle();
+        if (financials) {
+          await supabase.from('airline_financials').update({
+            balance_usd: financials.balance_usd - fee,
+            updated_at: new Date().toISOString(),
+          }).eq('id', 1);
+        }
+      }
+    }
     await supabase.from('gates').update({
       status: 'open',
       assigned_aircraft_id: null,
       assigned_booking_id: null,
       occupied_since: null,
+      last_billed_at: null,
     }).eq('id', id);
     fetchData();
   }
@@ -318,6 +364,7 @@ export default function Gates({ airports, isAdmin }: GatesProps) {
                     <th className="px-4 py-2.5 text-left text-slate-400 font-medium">Price</th>
                     <th className="px-4 py-2.5 text-left text-slate-400 font-medium">Status</th>
                     <th className="px-4 py-2.5 text-left text-slate-400 font-medium">Aircraft</th>
+                    <th className="px-4 py-2.5 text-left text-slate-400 font-medium">Accrued</th>
                     {isAdmin && <th className="px-4 py-2.5 text-right text-slate-400 font-medium">Actions</th>}
                   </tr>
                 </thead>
@@ -359,6 +406,23 @@ export default function Gates({ airports, isAdmin }: GatesProps) {
                           <span className="text-xs text-slate-500">-</span>
                         );
                       })()}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {(() => {
+                          const accrued = getAccruedCost(gate);
+                          if (!accrued) return <span className="text-xs text-slate-500">-</span>;
+                          return (
+                            <div className="flex items-center gap-1.5">
+                              <DollarSign className="w-3 h-3 text-amber-400" />
+                              <span className="text-xs font-mono text-amber-300 font-semibold">
+                                ${accrued.cost.toFixed(2)}
+                              </span>
+                              <span className="text-[10px] text-slate-500">
+                                ({accrued.minutes}min)
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </td>
                       {isAdmin && (
                         <td className="px-4 py-2.5 text-right">

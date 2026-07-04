@@ -494,6 +494,7 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
     }).eq('id', bookingId);
 
     // Move aircraft to arrival and set available, unassign origin gate
+    let gateFeeTotal = 0;
     if (booking.aircraft_id) {
       await supabase.from('aircraft').update({
         current_airport_icao: arrivalIcao,
@@ -501,12 +502,37 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
         reserved_by_booking_id: null,
       }).eq('id', booking.aircraft_id);
 
-      // Release any gate assigned to this aircraft at the origin
-      await supabase.from('gates').update({
-        status: 'open',
-        assigned_aircraft_id: null,
-        occupied_since: null,
-      }).eq('assigned_aircraft_id', booking.aircraft_id);
+      // Bill and release any per-hour gate assigned to this aircraft
+      const { data: occupiedGates } = await supabase
+        .from('gates')
+        .select('*')
+        .eq('assigned_aircraft_id', booking.aircraft_id);
+
+      for (const gate of (occupiedGates || [])) {
+        if (gate.lease_type === 'per_hour' && gate.hourly_price && gate.occupied_since) {
+          const billingStart = gate.last_billed_at || gate.occupied_since;
+          const now = new Date();
+          const minutesParked = (now.getTime() - new Date(billingStart).getTime()) / 60000;
+          const tenMinBlocks = Math.ceil(minutesParked / 10);
+          const fee = tenMinBlocks * (gate.hourly_price / 6);
+          if (fee > 0) {
+            gateFeeTotal += fee;
+            await supabase.from('financial_transactions').insert({
+              type: 'gate_fee',
+              amount: -fee,
+              description: `Gate ${gate.gate_number} at ${gate.airport_icao}: ${tenMinBlocks * 10}min @ $${gate.hourly_price}/hr`,
+              reference_id: gate.id,
+            });
+          }
+        }
+        await supabase.from('gates').update({
+          status: 'open',
+          assigned_aircraft_id: null,
+          assigned_booking_id: null,
+          occupied_since: null,
+          last_billed_at: null,
+        }).eq('id', gate.id);
+      }
     }
 
     // --- ECONOMY: Calculate revenue and costs ---
@@ -518,7 +544,7 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
       .eq('id', 1)
       .maybeSingle();
 
-    let balanceChange = 0;
+    let balanceChange = -gateFeeTotal;
 
     // Revenue: ticket price * arrived pax
     if (arrivedPaxCount > 0) {
