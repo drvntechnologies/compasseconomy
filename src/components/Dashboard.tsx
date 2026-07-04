@@ -77,9 +77,19 @@ export default function Dashboard({ airports, routes }: DashboardProps) {
   }, [fetchData]);
 
   async function fetchPerformanceStats() {
-    const today = new Date().toISOString().slice(0, 10);
+    // Operational day starts at 0400Z (when pax regenerate)
+    const now = new Date();
+    const utcHour = now.getUTCHours();
+    const operationalDayStart = new Date(now);
+    if (utcHour < 4) {
+      operationalDayStart.setUTCDate(operationalDayStart.getUTCDate() - 1);
+    }
+    operationalDayStart.setUTCHours(4, 0, 0, 0);
+    const operationalDate = operationalDayStart.toISOString().slice(0, 10);
+    const operationalStartISO = operationalDayStart.toISOString();
+
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const monthStart = today.slice(0, 7) + '-01';
+    const monthStart = operationalDate.slice(0, 7) + '-01';
 
     const [
       todayGenRes,
@@ -95,9 +105,9 @@ export default function Dashboard({ airports, routes }: DashboardProps) {
       pilotLogsRes,
       profilesRes,
     ] = await Promise.all([
-      supabase.from('pax_pools').select('pax_count').eq('generated_date', today),
-      supabase.from('flight_logs').select('*').eq('flight_date', today),
-      supabase.from('financial_transactions').select('amount').eq('type', 'ticket_revenue').gte('created_at', today + 'T00:00:00Z'),
+      supabase.from('pax_pools').select('pax_count').eq('generated_date', operationalDate),
+      supabase.from('flight_logs').select('*').gte('created_at', operationalStartISO),
+      supabase.from('financial_transactions').select('amount').eq('type', 'ticket_revenue').gte('created_at', operationalStartISO),
       supabase.from('flight_logs').select('*').gte('flight_date', weekAgo),
       supabase.from('financial_transactions').select('amount').eq('type', 'ticket_revenue').gte('created_at', weekAgo + 'T00:00:00Z'),
       supabase.from('flight_bookings').select('engine_hours').eq('status', 'completed').gte('created_at', weekAgo + 'T00:00:00Z'),
