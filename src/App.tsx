@@ -10,7 +10,8 @@ import Dispatch from './components/Dispatch';
 import Fleet from './components/Fleet';
 import Gates from './components/Gates';
 import Finances from './components/Finances';
-import { Plane, LogOut, LayoutDashboard, Settings, Users, Navigation, Clock, Gauge, Radio, PanelLeftClose, PanelLeft, DoorOpen, DollarSign, KeyRound, Sun, Moon, Monitor, Menu, X } from 'lucide-react';
+import Acars from './components/Acars';
+import { Plane, LogOut, LayoutDashboard, Settings, Users, Navigation, Clock, Gauge, Radio, Radar, PanelLeftClose, PanelLeft, DoorOpen, DollarSign, KeyRound, Sun, Moon, Monitor, Menu, X } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 
 export default function App() {
@@ -18,7 +19,7 @@ export default function App() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [airports, setAirports] = useState<Airport[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
-  const [activeView, setActiveView] = useState<'dashboard' | 'dispatch' | 'planner' | 'capacity' | 'fleet' | 'gates' | 'finances' | 'admin'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'dispatch' | 'planner' | 'capacity' | 'fleet' | 'gates' | 'finances' | 'acars' | 'admin'>('dashboard');
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(new Date());
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -154,7 +155,10 @@ export default function App() {
     { id: 'finances' as const, label: 'Finances', icon: DollarSign },
     { id: 'planner' as const, label: 'Planner', icon: Navigation },
     { id: 'capacity' as const, label: 'Capacity', icon: Gauge },
-    ...(isAdmin ? [{ id: 'admin' as const, label: 'Admin', icon: Settings }] : []),
+    ...(isAdmin ? [
+      { id: 'acars' as const, label: 'ACARS DEV', icon: Radar },
+      { id: 'admin' as const, label: 'Admin', icon: Settings },
+    ] : []),
   ];
 
   return (
@@ -359,6 +363,10 @@ export default function App() {
 
           {activeView === 'capacity' && (
             <CapacityChecker airports={airports} routes={routes} />
+          )}
+
+          {activeView === 'acars' && isAdmin && (
+            <Acars airports={airports} routes={routes} currentUserId={session?.user?.id || null} isAdmin={isAdmin} />
           )}
 
           {activeView === 'admin' && isAdmin && (

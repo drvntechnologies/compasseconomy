@@ -37,6 +37,7 @@ export interface PaxPool {
   pax_count: number;
   status: 'waiting' | 'in_transit' | 'layover' | 'arrived';
   connections_remaining: number;
+  booking_id: string | null;
   generated_date: string;
   created_at: string;
 }
@@ -68,7 +69,7 @@ export interface FlightBooking {
   arrival_icao: string;
   departure_time_utc: string;
   pax_count: number;
-  status: 'booked' | 'completed' | 'cancelled';
+  status: 'booked' | 'in_progress' | 'completed' | 'cancelled';
   aircraft_id: string | null;
   engine_hours: number | null;
   created_at: string;
@@ -183,5 +184,54 @@ export interface MonthlyBillingLog {
   gate_fees_total: number;
   lease_fees_total: number;
   processed_by: string;
+  created_at: string;
+}
+
+export type FlightPhase =
+  | 'preflight'
+  | 'taxi_out'
+  | 'takeoff'
+  | 'climb'
+  | 'cruise'
+  | 'descent'
+  | 'approach'
+  | 'landed'
+  | 'taxi_in'
+  | 'parked';
+
+export const FLIGHT_PHASES: FlightPhase[] = [
+  'preflight', 'taxi_out', 'takeoff', 'climb', 'cruise',
+  'descent', 'approach', 'landed', 'taxi_in', 'parked',
+];
+
+export const FLIGHT_PHASE_LABELS: Record<FlightPhase, string> = {
+  preflight: 'Pre-Flight',
+  taxi_out: 'Taxi Out',
+  takeoff: 'Takeoff',
+  climb: 'Climb',
+  cruise: 'Cruise',
+  descent: 'Descent',
+  approach: 'Approach',
+  landed: 'Landed',
+  taxi_in: 'Taxi In',
+  parked: 'Parked',
+};
+
+export interface AcarsFlight {
+  id: string;
+  booking_id: string;
+  user_id: string;
+  phase: FlightPhase;
+  altitude_ft: number | null;
+  ground_speed_kts: number | null;
+  heading_deg: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  fuel_lbs: number | null;
+  vs_fpm: number | null;
+  sim_rate: number;
+  last_report_at: string;
+  started_at: string | null;
+  ended_at: string | null;
   created_at: string;
 }
