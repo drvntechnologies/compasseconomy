@@ -28,7 +28,7 @@ const PHASE_COLORS: Record<FlightPhase, string> = {
   parked: 'bg-slate-500/20 text-slate-300',
 };
 
-export default function Acars({ currentUserId }: AcarsProps) {
+function Acars({ currentUserId }: AcarsProps) {
   const [acarsFlights, setAcarsFlights] = useState<AcarsFlight[]>([]);
   const [bookings, setBookings] = useState<FlightBooking[]>([]);
   const [aircraft, setAircraft] = useState<Aircraft[]>([]);
@@ -613,4 +613,4 @@ export default function Acars({ currentUserId }: AcarsProps) {
   );
 }
 
-export default Acars
+export default Acars;
