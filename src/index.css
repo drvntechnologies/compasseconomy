@@ -1073,6 +1073,26 @@ body {
   color: rgba(230, 240, 255, 0.95) !important;
 }
 
+/* Sidebar text must remain light on dark glass */
+.win7 aside p,
+.win7 aside span,
+.win7 aside label,
+.win7 aside div {
+  color: rgba(200, 220, 240, 0.85);
+}
+
+.win7 aside .text-slate-300,
+.win7 aside .text-slate-400,
+.win7 aside .text-slate-500,
+.win7 aside .text-slate-600 {
+  color: rgba(170, 195, 220, 0.8) !important;
+}
+
+.win7 aside .text-cyan-400,
+.win7 aside .text-cyan-600 {
+  color: #7ec8f0 !important;
+}
+
 /* Mobile header bar */
 .win7 .fixed.top-0.bg-slate-800 {
   background: var(--w7-taskbar) !important;
@@ -1125,13 +1145,27 @@ body {
   background: rgba(200, 215, 230, 0.6) !important;
 }
 
-/* Text colors */
+/* Text colors - ensure all content text is dark and readable */
+.win7 main {
+  color: var(--w7-text) !important;
+}
+
+.win7 main p,
+.win7 main span,
+.win7 main label,
+.win7 main div,
+.win7 main li,
+.win7 main td,
+.win7 main th {
+  color: inherit;
+}
+
 .win7 .text-white {
   color: var(--w7-text) !important;
 }
 
 .win7 .text-slate-300 {
-  color: var(--w7-text-secondary) !important;
+  color: #2d3748 !important;
 }
 
 .win7 .text-slate-200,
@@ -1140,67 +1174,67 @@ body {
 }
 
 .win7 .text-slate-400 {
-  color: var(--w7-text-secondary) !important;
+  color: #4a5568 !important;
 }
 
 .win7 .text-slate-500,
 .win7 .text-slate-600 {
-  color: var(--w7-text-muted) !important;
+  color: #606878 !important;
 }
 
 .win7 .text-sky-400,
 .win7 .text-sky-300,
 .win7 .text-sky-500 {
-  color: var(--w7-accent) !important;
+  color: #1a6baa !important;
 }
 
 .win7 .text-emerald-400,
 .win7 .text-emerald-300,
 .win7 .text-emerald-500 {
-  color: var(--w7-success) !important;
+  color: #1a7a2a !important;
 }
 
 .win7 .text-green-400,
 .win7 .text-green-300,
 .win7 .text-green-500 {
-  color: #2d8c2d !important;
+  color: #1a7a1a !important;
 }
 
 .win7 .text-red-400,
 .win7 .text-red-300,
 .win7 .text-red-500 {
-  color: var(--w7-error) !important;
+  color: #b91c1c !important;
 }
 
 .win7 .text-amber-400,
 .win7 .text-amber-300,
 .win7 .text-yellow-400,
 .win7 .text-yellow-300 {
-  color: var(--w7-warning) !important;
+  color: #92600a !important;
 }
 
 .win7 .text-violet-400,
 .win7 .text-violet-300,
 .win7 .text-purple-400 {
-  color: #6b3fa0 !important;
+  color: #5b2d8a !important;
 }
 
 .win7 .text-cyan-400,
 .win7 .text-cyan-300,
 .win7 .text-cyan-600,
 .win7 .text-cyan-500 {
-  color: #1a8a9a !important;
+  color: #0e6e7a !important;
 }
 
 .win7 .text-teal-400,
 .win7 .text-teal-300 {
-  color: #1a7a7a !important;
+  color: #0e6a6a !important;
 }
 
 .win7 .text-orange-400,
 .win7 .text-orange-300,
 .win7 .text-orange-500 {
-  color: #c05a00 !important;
+  color: #9a4500 !important;
 }
 
 /* Placeholder text */
@@ -1240,11 +1274,20 @@ body {
 /* Sky/blue action buttons = Blue Aero primary button */
 .win7 .bg-sky-500,
 .win7 .bg-sky-600,
-.win7 .bg-sky-400 {
+.win7 .bg-sky-400,
+.win7 button.bg-sky-500,
+.win7 button.bg-sky-600 {
   background: linear-gradient(180deg, #5aade0 0%, #3d8cc8 40%, #2a70aa 100%) !important;
   color: #ffffff !important;
   border-color: #2060a0 !important;
   box-shadow: 0 1px 3px rgba(30, 80, 140, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
+}
+
+.win7 .bg-sky-500 .text-white,
+.win7 .bg-sky-600 .text-white,
+.win7 button.bg-sky-500 span,
+.win7 button.bg-sky-600 span {
+  color: #ffffff !important;
 }
 
 .win7 .bg-sky-500:hover,
@@ -1260,10 +1303,17 @@ body {
 
 /* Emerald action buttons */
 .win7 .bg-emerald-500,
-.win7 .bg-emerald-600 {
+.win7 .bg-emerald-600,
+.win7 button.bg-emerald-500,
+.win7 button.bg-emerald-600 {
   background: linear-gradient(180deg, #4ab84a 0%, #2d9b2d 40%, #1f801f 100%) !important;
   color: #ffffff !important;
   border-color: #1a6a1a !important;
+}
+
+.win7 .bg-emerald-500 .text-white,
+.win7 button.bg-emerald-500 span {
+  color: #ffffff !important;
 }
 
 .win7 .bg-emerald-500\/10 {
@@ -1281,10 +1331,17 @@ body {
 
 /* Red / destructive */
 .win7 .bg-red-500,
-.win7 .bg-red-600 {
+.win7 .bg-red-600,
+.win7 button.bg-red-500,
+.win7 button.bg-red-600 {
   background: linear-gradient(180deg, #e04030 0%, #c42b1c 40%, #a01f14 100%) !important;
   color: #ffffff !important;
   border-color: #8a1a10 !important;
+}
+
+.win7 .bg-red-500 .text-white,
+.win7 button.bg-red-500 span {
+  color: #ffffff !important;
 }
 
 .win7 .bg-red-500\/10,
@@ -1535,6 +1592,33 @@ body {
 .win7 .min-h-screen.flex.items-center .bg-slate-900 {
   background: rgba(200, 215, 230, 0.5) !important;
   border-radius: 4px !important;
+}
+
+/* Auth page text - dark on light panel */
+.win7 .min-h-screen.flex.items-center .text-white,
+.win7 .min-h-screen.flex.items-center h1,
+.win7 .min-h-screen.flex.items-center h2 {
+  color: #1a2a3a !important;
+}
+
+.win7 .min-h-screen.flex.items-center .text-slate-400,
+.win7 .min-h-screen.flex.items-center p {
+  color: #4a5a6a !important;
+}
+
+/* Colored button text must stay white */
+.win7 .bg-sky-500 .text-white,
+.win7 .bg-emerald-500 .text-white,
+.win7 .bg-red-500 .text-white,
+.win7 .bg-teal-600 .text-white,
+.win7 [class*="bg-sky-500"].text-white,
+.win7 [class*="bg-emerald-500"].text-white,
+.win7 [class*="bg-red-500"].text-white,
+.win7 button[class*="bg-sky-500"],
+.win7 button[class*="bg-emerald-500"],
+.win7 button[class*="bg-red-500"],
+.win7 button[class*="bg-teal-600"] {
+  color: #ffffff !important;
 }
 
 /* Ring overrides */
