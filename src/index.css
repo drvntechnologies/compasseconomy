@@ -168,7 +168,7 @@ body {
   background: var(--w98-bg) !important;
 }
 
-/* Disable all backdrop blur and transitions */
+/* Disable all backdrop blur, transitions, animations */
 .win98 .backdrop-blur-sm,
 .win98 .backdrop-blur-md,
 .win98 .backdrop-blur-lg,
@@ -183,7 +183,9 @@ body {
   transition: none !important;
 }
 
-.win98 .animate-pulse {
+.win98 .animate-pulse,
+.win98 .animate-spin,
+.win98 .animate-bounce {
   animation: none !important;
 }
 
@@ -192,9 +194,45 @@ body {
   border-radius: 0 !important;
 }
 
+/* Kill all gradients */
+.win98 [class*="bg-gradient"],
+.win98 .bg-gradient-to-r,
+.win98 .bg-gradient-to-l,
+.win98 .bg-gradient-to-b,
+.win98 .bg-gradient-to-t,
+.win98 .bg-gradient-to-br,
+.win98 .bg-gradient-to-bl,
+.win98 .bg-gradient-to-tr,
+.win98 .bg-gradient-to-tl {
+  background: var(--w98-window) !important;
+  background-image: none !important;
+}
+
+/* Kill all ring utilities */
+.win98 .ring-1,
+.win98 .ring-2,
+.win98 [class*="focus:ring"],
+.win98 [class*="ring-sky"],
+.win98 [class*="ring-emerald"],
+.win98 [class*="ring-cyan"],
+.win98 [class*="ring-amber"],
+.win98 [class*="ring-red"] {
+  --tw-ring-shadow: none !important;
+  box-shadow: inset 1px 1px 0 var(--w98-border-darkest) !important;
+}
+
 /* Background overrides - the teal desktop */
-.win98 .min-h-screen.bg-slate-900 {
+.win98 .min-h-screen.bg-slate-900,
+.win98 .min-h-screen.bg-slate-800 {
   background: var(--w98-bg) !important;
+}
+
+.win98 .bg-slate-900 {
+  background: var(--w98-bg) !important;
+}
+
+.win98 .bg-slate-600 {
+  background: var(--w98-window-dark) !important;
 }
 
 /* Sidebar = Windows taskbar style */
@@ -285,7 +323,8 @@ body {
 
 .win98 aside .text-slate-300,
 .win98 aside .text-slate-400,
-.win98 aside .text-slate-500 {
+.win98 aside .text-slate-500,
+.win98 aside .text-slate-600 {
   color: var(--w98-text) !important;
 }
 
@@ -316,6 +355,13 @@ body {
 
 .win98 aside .text-white {
   color: var(--w98-text) !important;
+}
+
+/* Mobile header bar */
+.win98 .fixed.top-0.bg-slate-800 {
+  background: var(--w98-window) !important;
+  border-bottom: 2px solid var(--w98-border-dark) !important;
+  box-shadow: inset 1px 1px 0 var(--w98-border-light), inset -1px -1px 0 var(--w98-border-darkest) !important;
 }
 
 /* Main content area = window */
@@ -354,57 +400,87 @@ body {
   border: 1px solid var(--w98-border-dark) !important;
 }
 
-/* Text colors */
+/* Text colors - core */
 .win98 .text-white,
-.win98 .text-slate-300 {
+.win98 .text-slate-300,
+.win98 .text-slate-200,
+.win98 .text-slate-100 {
   color: var(--w98-text) !important;
 }
 
 .win98 .text-slate-400,
-.win98 .text-slate-500 {
+.win98 .text-slate-500,
+.win98 .text-slate-600 {
   color: var(--w98-text-disabled) !important;
 }
 
 .win98 .text-sky-400,
-.win98 .text-sky-300 {
-  color: #000000 !important;
+.win98 .text-sky-300,
+.win98 .text-sky-500 {
+  color: #000080 !important;
 }
 
 .win98 .text-emerald-400,
-.win98 .text-emerald-300 {
+.win98 .text-emerald-300,
+.win98 .text-emerald-500 {
   color: #006400 !important;
 }
 
+.win98 .text-green-400,
+.win98 .text-green-300,
+.win98 .text-green-500 {
+  color: #008000 !important;
+}
+
 .win98 .text-red-400,
-.win98 .text-red-300 {
+.win98 .text-red-300,
+.win98 .text-red-500 {
   color: #cc0000 !important;
 }
 
 .win98 .text-amber-400,
 .win98 .text-amber-300,
-.win98 .text-yellow-400 {
+.win98 .text-yellow-400,
+.win98 .text-yellow-300 {
   color: #664400 !important;
 }
 
-.win98 .text-violet-400 {
+.win98 .text-violet-400,
+.win98 .text-violet-300,
+.win98 .text-purple-400,
+.win98 .text-purple-300 {
   color: #660066 !important;
 }
 
-.win98 .text-cyan-400 {
+.win98 .text-cyan-400,
+.win98 .text-cyan-300,
+.win98 .text-cyan-600,
+.win98 .text-cyan-500 {
   color: #005555 !important;
 }
 
-.win98 .text-cyan-300,
-.win98 .text-cyan-600 {
-  color: #004444 !important;
+.win98 .text-teal-400,
+.win98 .text-teal-300 {
+  color: #005050 !important;
 }
 
-.win98 .text-sky-500 {
-  color: #000000 !important;
+.win98 .text-orange-400,
+.win98 .text-orange-300,
+.win98 .text-orange-500 {
+  color: #994400 !important;
 }
 
-.win98 .text-emerald-500 {
-  color: #006400 !important;
+.win98 .text-blue-400,
+.win98 .text-blue-300,
+.win98 .text-blue-500 {
+  color: #000080 !important;
+}
+
+/* Placeholder text */
+.win98 .placeholder-slate-500::placeholder,
+.win98 input::placeholder,
+.win98 textarea::placeholder {
+  color: var(--w98-text-disabled) !important;
 }
 
 /* Buttons throughout */
@@ -426,9 +502,15 @@ body {
   padding: 5px 11px 3px 13px !important;
 }
 
+.win98 button:disabled {
+  color: var(--w98-text-disabled) !important;
+  text-shadow: 1px 1px 0 var(--w98-border-light) !important;
+}
+
 /* Sky/blue action buttons */
 .win98 .bg-sky-500,
 .win98 .bg-sky-600,
+.win98 .bg-sky-400,
 .win98 .bg-sky-500\/10 {
   background: var(--w98-button-face) !important;
   color: var(--w98-text) !important;
@@ -442,12 +524,64 @@ body {
   color: #008000 !important;
 }
 
+.win98 .bg-green-500,
+.win98 .bg-green-600,
+.win98 .bg-green-500\/20 {
+  background: #008000 !important;
+}
+
 /* Red / destructive buttons */
 .win98 .bg-red-500,
 .win98 .bg-red-600,
-.win98 .bg-red-500\/10 {
+.win98 .bg-red-500\/10,
+.win98 .bg-red-500\/20 {
   background: var(--w98-button-face) !important;
   color: #ff0000 !important;
+}
+
+/* Teal buttons */
+.win98 .bg-teal-600,
+.win98 .bg-teal-500,
+.win98 .bg-teal-500\/10 {
+  background: var(--w98-button-face) !important;
+  color: #005050 !important;
+}
+
+/* Amber/yellow */
+.win98 .bg-amber-500,
+.win98 .bg-amber-600,
+.win98 .bg-amber-500\/10,
+.win98 .bg-amber-500\/20 {
+  background: #808000 !important;
+}
+
+/* Orange */
+.win98 .bg-orange-500,
+.win98 .bg-orange-600,
+.win98 .bg-orange-500\/20 {
+  background: #996600 !important;
+}
+
+/* Violet/purple */
+.win98 .bg-violet-500,
+.win98 .bg-violet-600,
+.win98 .bg-violet-500\/10,
+.win98 .bg-violet-500\/20 {
+  background: var(--w98-window) !important;
+}
+
+/* Cyan */
+.win98 .bg-cyan-500,
+.win98 .bg-cyan-600,
+.win98 .bg-cyan-500\/10,
+.win98 .bg-cyan-500\/20 {
+  background: var(--w98-window) !important;
+}
+
+/* Slate phase badges */
+.win98 .bg-slate-500\/20 {
+  background: var(--w98-window) !important;
+  border: 1px solid var(--w98-border-dark) !important;
 }
 
 /* Inputs & selects */
@@ -467,9 +601,10 @@ body {
 .win98 input:focus,
 .win98 select:focus,
 .win98 textarea:focus {
-  outline: none !important;
-  ring: none !important;
+  outline: 1px dotted var(--w98-text) !important;
+  outline-offset: -1px !important;
   box-shadow: inset 1px 1px 0 var(--w98-border-darkest) !important;
+  ring: none !important;
 }
 
 /* Tables */
@@ -499,7 +634,9 @@ body {
 /* Borders */
 .win98 .border-slate-700,
 .win98 .border-slate-700\/50,
-.win98 .border-slate-600 {
+.win98 .border-slate-600,
+.win98 .border-slate-500,
+.win98 .border-red-500\/20 {
   border-color: var(--w98-border-dark) !important;
 }
 
@@ -519,7 +656,19 @@ body {
   font-size: 14px !important;
 }
 
-/* Status indicators */
+/* Paragraphs and labels */
+.win98 p,
+.win98 label,
+.win98 span {
+  color: var(--w98-text) !important;
+}
+
+.win98 .text-slate-400 span,
+.win98 .text-slate-500 span {
+  color: var(--w98-text-disabled) !important;
+}
+
+/* Status dot indicators */
 .win98 .bg-emerald-500 {
   background: #008000 !important;
 }
@@ -529,7 +678,7 @@ body {
 }
 
 .win98 .bg-amber-500 {
-  background: #ffff00 !important;
+  background: #808000 !important;
 }
 
 /* Badges and chips */
@@ -539,21 +688,28 @@ body {
 .win98 [class*="bg-amber-500\/10"],
 .win98 [class*="bg-red-500\/10"],
 .win98 [class*="bg-cyan-500\/10"],
-.win98 [class*="bg-teal-500\/10"] {
+.win98 [class*="bg-teal-500\/10"],
+.win98 [class*="bg-orange-500\/10"],
+.win98 [class*="bg-green-500\/10"],
+.win98 [class*="bg-slate-500\/10"] {
   background: var(--w98-window) !important;
   border: 1px solid var(--w98-border-dark) !important;
   padding: 1px 4px !important;
 }
 
-/* Teal text (used by W98 toggle active state) */
-.win98 .text-teal-400 {
-  color: #005050 !important;
-}
-
-/* Orange text */
-.win98 .text-orange-400,
-.win98 .text-orange-300 {
-  color: #994400 !important;
+/* Phase color badges with /20 opacity (Acars) */
+.win98 [class*="bg-sky-500\/20"],
+.win98 [class*="bg-emerald-500\/20"],
+.win98 [class*="bg-violet-500\/20"],
+.win98 [class*="bg-amber-500\/20"],
+.win98 [class*="bg-red-500\/20"],
+.win98 [class*="bg-cyan-500\/20"],
+.win98 [class*="bg-teal-500\/20"],
+.win98 [class*="bg-orange-500\/20"],
+.win98 [class*="bg-green-500\/20"],
+.win98 [class*="bg-slate-500\/20"] {
+  background: var(--w98-window) !important;
+  border: 1px solid var(--w98-border-dark) !important;
 }
 
 /* Scrollbars */
@@ -593,12 +749,75 @@ body {
   backdrop-filter: none !important;
 }
 
-/* Override all shadows to none */
+/* Override all shadows */
 .win98 .shadow-lg,
 .win98 .shadow-xl,
 .win98 .shadow-2xl,
-.win98 .shadow-md {
+.win98 .shadow-md,
+.win98 [class*="shadow-sky"],
+.win98 [class*="shadow-emerald"],
+.win98 [class*="shadow-teal"],
+.win98 [class*="shadow-red"] {
   box-shadow: inset 1px 1px 0 var(--w98-border-light), inset -1px -1px 0 var(--w98-border-darkest) !important;
+}
+
+/* Opacity overrides for disabled states */
+.win98 .disabled\:opacity-50:disabled,
+.win98 .opacity-50 {
+  opacity: 0.6 !important;
+}
+
+/* Cursor */
+.win98 .disabled\:cursor-not-allowed:disabled {
+  cursor: not-allowed !important;
+}
+
+/* Auth page = Windows login dialog */
+.win98 .min-h-screen.flex.items-center {
+  background: var(--w98-bg) !important;
+}
+
+.win98 .min-h-screen.flex.items-center .bg-slate-800 {
+  background: var(--w98-window) !important;
+  border: 2px solid !important;
+  border-color: var(--w98-border-light) var(--w98-border-darkest) var(--w98-border-darkest) var(--w98-border-light) !important;
+  box-shadow: inset 1px 1px 0 #dfdfdf, inset -1px -1px 0 var(--w98-border-dark) !important;
+}
+
+.win98 .min-h-screen.flex.items-center .bg-sky-500\/10 {
+  background: var(--w98-window) !important;
+  border: 1px solid var(--w98-border-dark) !important;
+}
+
+/* Auth page tab switcher */
+.win98 .min-h-screen.flex.items-center .bg-slate-900 {
+  background: var(--w98-window-dark) !important;
+}
+
+/* Progress bars (Acars, etc.) */
+.win98 .overflow-hidden .h-full[class*="bg-"] {
+  background: var(--w98-highlight) !important;
+}
+
+.win98 .h-1\.5,
+.win98 .h-2 {
+  background: var(--w98-window-dark) !important;
+}
+
+/* Hover states */
+.win98 .hover\:bg-slate-700\/50:hover,
+.win98 .hover\:bg-slate-700:hover,
+.win98 .hover\:bg-slate-600:hover {
+  background: #dfdfdf !important;
+}
+
+.win98 .hover\:text-white:hover,
+.win98 .hover\:text-sky-400:hover {
+  color: var(--w98-text) !important;
+}
+
+.win98 .hover\:bg-sky-400:hover {
+  background: var(--w98-button-face) !important;
 }
 
 /* All font sizes capped */
@@ -609,23 +828,66 @@ body {
 .win98 .text-xl { font-size: 14px !important; }
 .win98 .text-2xl { font-size: 14px !important; }
 .win98 .text-3xl { font-size: 16px !important; }
+.win98 .text-4xl { font-size: 18px !important; }
 .win98 .text-\[10px\] { font-size: 10px !important; }
 
 /* Grid/flex gaps tightened */
 .win98 .gap-6 { gap: 8px !important; }
 .win98 .gap-4 { gap: 6px !important; }
 .win98 .gap-3 { gap: 4px !important; }
+.win98 .gap-2 { gap: 3px !important; }
 
 /* Padding reduced */
+.win98 .p-8 { padding: 8px !important; }
 .win98 .p-6 { padding: 8px !important; }
 .win98 .p-5 { padding: 6px !important; }
 .win98 .p-4 { padding: 6px !important; }
 .win98 .px-6 { padding-left: 8px !important; padding-right: 8px !important; }
 .win98 .py-8 { padding-top: 8px !important; padding-bottom: 8px !important; }
 
+/* SVG icons - ensure consistent sizing */
+.win98 svg {
+  color: inherit !important;
+}
+
+/* Color-scheme override for datetime inputs */
+.win98 [style*="color-scheme"] {
+  color-scheme: light !important;
+}
+
+/* Space-y utility dividers */
+.win98 .space-y-4 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 6px !important;
+}
+
+.win98 .space-y-1 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 2px !important;
+}
+
 /* Win98 focus ring override */
 .win98 *:focus {
   outline: 1px dotted var(--w98-text) !important;
   outline-offset: -1px !important;
-  box-shadow: inset 1px 1px 0 var(--w98-border-darkest) !important;
+}
+
+.win98 button:focus {
+  box-shadow: inset 1px 1px 0 var(--w98-border-light), inset -1px -1px 0 var(--w98-border-darkest), inset 2px 2px 0 #dfdfdf, inset -2px -2px 0 var(--w98-border-dark) !important;
+}
+
+/* Title bar style for section headers within main content */
+.win98 .bg-slate-800\/50 > div:first-child {
+  border-bottom: 1px solid var(--w98-border-dark) !important;
+}
+
+/* SearchableSelect dropdown */
+.win98 .absolute.z-50 {
+  background: var(--w98-field) !important;
+  border: 2px solid !important;
+  border-color: var(--w98-border-dark) var(--w98-border-light) var(--w98-border-light) var(--w98-border-dark) !important;
+  box-shadow: 2px 2px 0 var(--w98-border-darkest) !important;
+}
+
+.win98 .absolute.z-50 button:hover {
+  background: var(--w98-highlight) !important;
+  color: var(--w98-highlight-text) !important;
 }
