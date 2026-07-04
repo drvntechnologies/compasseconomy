@@ -134,7 +134,7 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
 
       const depGateMap: Record<string, Gate> = {};
       for (const b of bookingData) {
-        if (b.aircraft_id && !gateMap[b.id]) {
+        if (b.aircraft_id) {
           const { data: depGate } = await supabase
             .from('gates')
             .select('*')
@@ -216,7 +216,7 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
 
       const depGateMap: Record<string, Gate> = {};
       for (const b of bookingData) {
-        if (b.aircraft_id && !gateMap[b.id]) {
+        if (b.aircraft_id) {
           const { data: depGate } = await supabase
             .from('gates')
             .select('*')
@@ -535,13 +535,21 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
         reserved_by_booking_id: null,
       }).eq('id', booking.aircraft_id);
 
-      // Bill and release any per-hour gate assigned to this aircraft
+      // Get all gates assigned to this aircraft
       const { data: occupiedGates } = await supabase
         .from('gates')
         .select('*')
         .eq('assigned_aircraft_id', booking.aircraft_id);
 
+      // Find the arrival gate (the one assigned to this booking at the arrival airport)
+      const arrivalGate = (occupiedGates || []).find(
+        g => g.assigned_booking_id === bookingId && g.airport_icao === arrivalIcao
+      );
+
+      // Release departure gates (not at arrival airport) and bill per-hour ones
       for (const gate of (occupiedGates || [])) {
+        if (gate.id === arrivalGate?.id) continue; // keep arrival gate occupied
+
         if (gate.lease_type === 'per_hour' && gate.hourly_price && gate.occupied_since) {
           const billingStart = gate.last_billed_at || gate.occupied_since;
           const now = new Date();
@@ -565,6 +573,14 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
           occupied_since: null,
           last_billed_at: null,
         }).eq('id', gate.id);
+      }
+
+      // Keep aircraft parked at arrival gate (clear booking reference, keep aircraft)
+      if (arrivalGate) {
+        await supabase.from('gates').update({
+          assigned_booking_id: null,
+          occupied_since: new Date().toISOString(),
+        }).eq('id', arrivalGate.id);
       }
     }
 
