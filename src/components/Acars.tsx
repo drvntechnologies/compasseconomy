@@ -28,7 +28,7 @@ const PHASE_COLORS: Record<FlightPhase, string> = {
   parked: 'bg-slate-500/20 text-slate-300',
 };
 
-export default function Acars(_props: AcarsProps) {
+export default function Acars({ currentUserId }: AcarsProps) {
   const [acarsFlights, setAcarsFlights] = useState<AcarsFlight[]>([]);
   const [bookings, setBookings] = useState<FlightBooking[]>([]);
   const [aircraft, setAircraft] = useState<Aircraft[]>([]);
@@ -175,8 +175,8 @@ export default function Acars(_props: AcarsProps) {
   const activeAcars = useMemo(() => acarsFlights.filter(a => !a.ended_at), [acarsFlights]);
   const completedAcars = useMemo(() => acarsFlights.filter(a => a.ended_at), [acarsFlights]);
   const unbookedFlights = useMemo(() =>
-    bookings.filter(b => b.status === 'booked' && !acarsFlights.some(a => a.booking_id === b.id)),
-    [bookings, acarsFlights]
+    bookings.filter(b => b.status === 'booked' && b.user_id === currentUserId && !acarsFlights.some(a => a.booking_id === b.id)),
+    [bookings, acarsFlights, currentUserId]
   );
 
   const selectedAcars = useMemo(() =>
@@ -612,3 +612,6 @@ export default function Acars(_props: AcarsProps) {
     </div>
   );
 }
+
+
+export default Acars
