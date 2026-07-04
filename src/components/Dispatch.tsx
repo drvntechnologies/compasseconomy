@@ -29,6 +29,7 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
 
   // Gate assignment state
   const [gateAssignments, setGateAssignments] = useState<Record<string, Gate>>({});
+  const [departureGateMap, setDepartureGateMap] = useState<Record<string, Gate>>({});
   const [requestingGate, setRequestingGate] = useState<string | null>(null);
   const [gateError, setGateError] = useState<string | null>(null);
   const [pilotNames, setPilotNames] = useState<Record<string, string>>({});
@@ -130,9 +131,25 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
           .maybeSingle();
         if (gate) gateMap[b.id] = gate;
       }
+
+      const depGateMap: Record<string, Gate> = {};
+      for (const b of bookingData) {
+        if (b.aircraft_id && !gateMap[b.id]) {
+          const { data: depGate } = await supabase
+            .from('gates')
+            .select('*')
+            .eq('assigned_aircraft_id', b.aircraft_id)
+            .eq('airport_icao', b.departure_icao)
+            .eq('status', 'occupied')
+            .maybeSingle();
+          if (depGate) depGateMap[b.id] = depGate;
+        }
+      }
+
       setBookedPaxMap(map);
       setBookingAircraftMap(acMap);
       setGateAssignments(gateMap);
+      setDepartureGateMap(depGateMap);
     }
 
     const { data: acData } = await supabase.from('aircraft').select('*');
@@ -196,9 +213,25 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
           .maybeSingle();
         if (gate) gateMap[b.id] = gate;
       }
+
+      const depGateMap: Record<string, Gate> = {};
+      for (const b of bookingData) {
+        if (b.aircraft_id && !gateMap[b.id]) {
+          const { data: depGate } = await supabase
+            .from('gates')
+            .select('*')
+            .eq('assigned_aircraft_id', b.aircraft_id)
+            .eq('airport_icao', b.departure_icao)
+            .eq('status', 'occupied')
+            .maybeSingle();
+          if (depGate) depGateMap[b.id] = depGate;
+        }
+      }
+
       setBookedPaxMap(map);
       setBookingAircraftMap(acMap);
       setGateAssignments(gateMap);
+      setDepartureGateMap(depGateMap);
     }
     setLoading(false);
   }
@@ -853,6 +886,7 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
                 .reduce((s, p) => s + p.pax_count, 0);
               const aircraftForBooking = bookingAircraftMap[booking.id];
               const assignedGate = gateAssignments[booking.id];
+              const depGate = departureGateMap[booking.id];
 
               return (
                 <div key={booking.id} className="p-4 sm:p-5">
@@ -896,11 +930,18 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
                             <span className="text-slate-500">{aircraftForBooking.aircraft_type}</span>
                           </div>
                         )}
+                        {depGate && (
+                          <div className="flex items-center gap-1.5 text-xs bg-sky-500/5 border border-sky-500/20 px-2.5 py-1 rounded-lg">
+                            <DoorOpen className="w-3 h-3 text-sky-400" />
+                            <span className="text-sky-300 font-medium">DEP Gate {depGate.gate_number}</span>
+                            <span className="text-slate-500">{depGate.airport_icao}</span>
+                          </div>
+                        )}
                         {assignedGate && (
                           <div className="flex items-center gap-1.5 text-xs bg-emerald-500/5 border border-emerald-500/20 px-2.5 py-1 rounded-lg">
                             <DoorOpen className="w-3 h-3 text-emerald-400" />
-                            <span className="text-emerald-300 font-medium">Gate {assignedGate.gate_number}</span>
-                            <span className="text-slate-500">at {assignedGate.airport_icao}</span>
+                            <span className="text-emerald-300 font-medium">ARR Gate {assignedGate.gate_number}</span>
+                            <span className="text-slate-500">{assignedGate.airport_icao}</span>
                           </div>
                         )}
                       </div>
