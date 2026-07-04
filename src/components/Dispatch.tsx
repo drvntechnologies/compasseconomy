@@ -97,7 +97,7 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
     const { data: bookingData } = await supabase
       .from('flight_bookings')
       .select('*')
-      .in('status', ['booked'])
+      .in('status', ['booked', 'in_progress'])
       .order('departure_time_utc', { ascending: true });
 
     if (bookingData) {
@@ -163,7 +163,7 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
     const { data: bookingData } = await supabase
       .from('flight_bookings')
       .select('*')
-      .in('status', ['booked'])
+      .in('status', ['booked', 'in_progress'])
       .order('departure_time_utc', { ascending: true });
 
     if (bookingData) {
@@ -880,6 +880,11 @@ export default function Dispatch({ airports, routes, currentUserId }: DispatchPr
                         }`}>
                           {pilotNames[booking.user_id] || 'Pilot'}
                         </span>
+                        {booking.status === 'in_progress' && (
+                          <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-amber-500/15 text-amber-400 animate-pulse">
+                            IN FLIGHT
+                          </span>
+                        )}
                       </div>
 
                       {/* Aircraft & Gate info */}
