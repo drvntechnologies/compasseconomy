@@ -809,5 +809,3 @@ function Acars({ currentUserId }: AcarsProps) {
 }
 
 export default Acars;
-
-export default Acars
