@@ -892,6 +892,43 @@ body {
   color: var(--w98-highlight-text) !important;
 }
 
+/* Checklist checkbox styling for W98 */
+.win98 .w-3\.5.h-3\.5.border {
+  width: 13px !important;
+  height: 13px !important;
+  background: var(--w98-field) !important;
+  border: 2px solid !important;
+  border-color: var(--w98-border-dark) var(--w98-border-light) var(--w98-border-light) var(--w98-border-dark) !important;
+  box-shadow: inset 1px 1px 0 var(--w98-border-darkest) !important;
+  border-radius: 0 !important;
+}
+
+.win98 .w-3\.5.h-3\.5.bg-emerald-500 {
+  background: var(--w98-field) !important;
+  border: 2px solid !important;
+  border-color: var(--w98-border-dark) var(--w98-border-light) var(--w98-border-light) var(--w98-border-dark) !important;
+  box-shadow: inset 1px 1px 0 var(--w98-border-darkest) !important;
+}
+
+.win98 .w-3\.5.h-3\.5.bg-emerald-500 svg {
+  color: var(--w98-text) !important;
+}
+
+/* Checklist tab scrollbar hide */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Line-through styling for checked items */
+.win98 .line-through {
+  text-decoration: line-through !important;
+  color: var(--w98-text-disabled) !important;
+}
+
 /* ============================================
    WINDOWS 7 AERO THEME
    ============================================ */
