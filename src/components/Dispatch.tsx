@@ -1229,9 +1229,52 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
                           </div>
                         );
                       })()}
-                    </div>
 
-                    {/* Actions - show to booking owner or admins */}
+                      {/* Cargo manifest */}
+                      {cargoForBooking.length > 0 && (() => {
+                        const grouped = cargoForBooking.reduce<Record<string, { origin_icao: string; destination_icao: string; weight_kg: number; shipments: number }>>((acc, pool) => {
+                          const key = `${pool.origin_icao}-${pool.destination_icao}`;
+                          if (!acc[key]) {
+                            acc[key] = { origin_icao: pool.origin_icao, destination_icao: pool.destination_icao, weight_kg: 0, shipments: 0 };
+                          }
+                          acc[key].weight_kg += pool.weight_kg;
+                          acc[key].shipments += 1;
+                          return acc;
+                        }, {});
+                        const cargoRows = Object.values(grouped).sort((a, b) => b.weight_kg - a.weight_kg);
+                        const terminatingCargo = cargoRows.filter(r => r.destination_icao === booking.arrival_icao);
+                        const connectingCargo = cargoRows.filter(r => r.destination_icao !== booking.arrival_icao);
+                        return (
+                          <div className="mt-2 bg-slate-900/50 rounded-lg p-3">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Package className="w-3 h-3 text-teal-400" />
+                              <p className="text-xs text-slate-500 font-medium">Cargo Manifest</p>
+                              <span className="text-[10px] text-slate-600 ml-auto">{cargoForBooking.length} shipment{cargoForBooking.length !== 1 ? 's' : ''}</span>
+                            </div>
+                            <div className="space-y-1">
+                              {[...terminatingCargo, ...connectingCargo].map(row => (
+                                <div key={`cargo-${row.origin_icao}-${row.destination_icao}`} className="flex items-center gap-3 text-xs">
+                                  <span className="text-white font-mono w-12 text-right">{(row.weight_kg / 1000).toFixed(1)}t</span>
+                                  <span className="text-slate-500">{row.shipments} pkg{row.shipments !== 1 ? 's' : ''}</span>
+                                  <span className="text-slate-400">{row.origin_icao}</span>
+                                  <ArrowRight className="w-3 h-3 text-slate-600" />
+                                  <span className={row.destination_icao === booking.arrival_icao ? 'text-emerald-400' : 'text-violet-400'}>
+                                    {row.destination_icao}
+                                  </span>
+                                  <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded ${
+                                    row.destination_icao === booking.arrival_icao
+                                      ? 'bg-emerald-500/10 text-emerald-400'
+                                      : 'bg-violet-500/10 text-violet-400'
+                                  }`}>
+                                    {row.destination_icao === booking.arrival_icao ? 'FINAL' : 'CONNECTING'}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
                     {currentUserId && (booking.user_id === currentUserId || isAdmin) && (
                     <div className="flex flex-row lg:flex-col gap-2 shrink-0 flex-wrap">
                       {isAdmin && booking.user_id !== currentUserId && (
