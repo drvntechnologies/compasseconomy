@@ -77,13 +77,91 @@ export const AIRCRAFT_TYPE_TO_SIMBRIEF: Record<string, string> = {
   'DHC-8': 'DH8D',
 };
 
-export function getSimBriefType(aircraftType: string): string {
-  const direct = AIRCRAFT_TYPE_TO_SIMBRIEF[aircraftType];
-  if (direct) return direct;
+// Direct ICAO designator mappings (some DB entries use N-prefix instead of B-prefix)
+const ICAO_DESIGNATOR_MAP: Record<string, string> = {
+  'B738': 'B738',
+  'B739': 'B739',
+  'B38M': 'B38M',
+  'B39M': 'B39M',
+  'B3XM': 'B3XM',
+  'B736': 'B736',
+  'B737': 'B737',
+  'B752': 'B752',
+  'B753': 'B753',
+  'B763': 'B763',
+  'B764': 'B764',
+  'B772': 'B772',
+  'B77L': 'B77L',
+  'B773': 'B773',
+  'B77W': 'B77W',
+  'B788': 'B788',
+  'B789': 'B789',
+  'B78X': 'B78X',
+  'B744': 'B744',
+  'B748': 'B748',
+  'A319': 'A319',
+  'A320': 'A320',
+  'A20N': 'A20N',
+  'A321': 'A321',
+  'A21N': 'A21N',
+  'A332': 'A332',
+  'A333': 'A333',
+  'A339': 'A339',
+  'A343': 'A343',
+  'A359': 'A359',
+  'A35K': 'A35K',
+  'A388': 'A388',
+  'BCS1': 'BCS1',
+  'BCS3': 'BCS3',
+  'E170': 'E170',
+  'E190': 'E190',
+  'E195': 'E195',
+  'CRJ2': 'CRJ2',
+  'CRJ7': 'CRJ7',
+  'CRJ9': 'CRJ9',
+  'AT76': 'AT76',
+  'AT45': 'AT45',
+  'DH8D': 'DH8D',
+  'MD82': 'MD82',
+  'MD88': 'MD88',
+  'MD90': 'MD90',
+  'MD11': 'MD11',
+  'MD11F': 'MD11',
+  // N-prefix variants (some fleets store "N77W" instead of "B77W")
+  'N77W': 'B77W',
+  'N772': 'B772',
+  'N77L': 'B77L',
+  'N752': 'B752',
+  'N753': 'B753',
+  'N738': 'B738',
+  'N739': 'B739',
+  'N788': 'B788',
+  'N789': 'B789',
+};
 
-  const normalized = aircraftType.trim();
-  for (const [key, value] of Object.entries(AIRCRAFT_TYPE_TO_SIMBRIEF)) {
-    if (normalized.toLowerCase().includes(key.toLowerCase())) return value;
+export function getSimBriefType(aircraftType: string): string {
+  const trimmed = aircraftType.trim().toUpperCase();
+
+  // 1. Check if the value is already a valid ICAO designator
+  if (ICAO_DESIGNATOR_MAP[trimmed]) {
+    return ICAO_DESIGNATOR_MAP[trimmed];
+  }
+
+  // 2. Check common-name mapping
+  const fromName = AIRCRAFT_TYPE_TO_SIMBRIEF[aircraftType];
+  if (fromName) return fromName;
+
+  // 3. Fuzzy match: sort keys longest-first so "777-300ER" matches before "777"
+  const sorted = Object.entries(AIRCRAFT_TYPE_TO_SIMBRIEF)
+    .sort(([a], [b]) => b.length - a.length);
+  const normalized = trimmed.toLowerCase();
+  for (const [key, value] of sorted) {
+    if (normalized.includes(key.toLowerCase())) return value;
+  }
+
+  // 4. Last resort: if it looks like a valid 3-4 char ICAO code, pass it through
+  if (/^[A-Z0-9]{3,4}$/.test(trimmed)) {
+    return trimmed;
   }
 
   return 'B738';
