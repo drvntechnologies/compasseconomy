@@ -8,6 +8,10 @@ interface SimBriefModalProps {
   destination: string;
   aircraftIcao: string;
   pax: number;
+  cargoKg?: number;
+  oewKg?: number | null;
+  mtowKg?: number | null;
+  mlwKg?: number | null;
   onClose: () => void;
 }
 
@@ -174,16 +178,37 @@ export function buildSimBriefUrl(params: {
   destination: string;
   aircraftIcao: string;
   pax: number;
+  cargoKg?: number;
+  oewKg?: number | null;
+  mtowKg?: number | null;
+  mlwKg?: number | null;
 }): string {
   const base = 'https://www.simbrief.com/system/dispatch.php';
-  const query = new URLSearchParams({
+  const queryObj: Record<string, string> = {
     airline: params.airline,
     fltnum: params.flightNumber,
     type: params.aircraftIcao,
     orig: params.origin,
     dest: params.destination,
     pax: String(params.pax),
-  });
+  };
+
+  // Pass cargo weight in thousands of kg (SimBrief cargo param format)
+  if (params.cargoKg && params.cargoKg > 0) {
+    queryObj.cargo = (params.cargoKg / 1000).toFixed(1);
+  }
+
+  // Pass aircraft weight limits via acdata JSON so SimBrief validates MTOW
+  if (params.oewKg || params.mtowKg || params.mlwKg) {
+    const acdata: Record<string, number> = {};
+    if (params.oewKg) acdata.oew = params.oewKg / 1000;
+    if (params.mtowKg) acdata.mtow = params.mtowKg / 1000;
+    if (params.mlwKg) acdata.mlw = params.mlwKg / 1000;
+    queryObj.acdata = JSON.stringify(acdata);
+  }
+
+  queryObj.units = 'KGS';
+  const query = new URLSearchParams(queryObj);
   return `${base}?${query.toString()}`;
 }
 
@@ -194,6 +219,10 @@ export default function SimBriefModal({
   destination,
   aircraftIcao,
   pax,
+  cargoKg,
+  oewKg,
+  mtowKg,
+  mlwKg,
   onClose,
 }: SimBriefModalProps) {
   const [iframeLoaded, setIframeLoaded] = useState(false);
@@ -205,6 +234,10 @@ export default function SimBriefModal({
     destination,
     aircraftIcao,
     pax,
+    cargoKg,
+    oewKg,
+    mtowKg,
+    mlwKg,
   });
 
   return (
@@ -221,7 +254,7 @@ export default function SimBriefModal({
                 SimBrief Dispatch - CPZ{flightNumber}
               </h3>
               <p className="text-slate-400 text-xs">
-                {origin} -&gt; {destination} | {aircraftIcao} | {pax} PAX
+                {origin} -&gt; {destination} | {aircraftIcao} | {pax} PAX{cargoKg ? ` | ${(cargoKg / 1000).toFixed(1)}t cargo` : ''}
               </p>
             </div>
           </div>

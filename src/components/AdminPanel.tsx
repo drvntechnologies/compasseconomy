@@ -26,7 +26,7 @@ export default function AdminPanel({ airports, routes, onRefresh }: AdminPanelPr
   // Route management state
   const [routeFilter, setRouteFilter] = useState('');
   const [showAddRoute, setShowAddRoute] = useState(false);
-  const [newRoute, setNewRoute] = useState({ flight_number: '', departure_icao: '', arrival_icao: '', duration_minutes: 0, airframes: '' });
+  const [newRoute, setNewRoute] = useState({ flight_number: '', departure_icao: '', arrival_icao: '', duration_minutes: 0, airframes: '', flight_type: 'pax', cargo_price_per_kg: 0.45 });
   const [regenerating, setRegenerating] = useState(false);
   const [regenMessage, setRegenMessage] = useState('');
 
@@ -40,6 +40,8 @@ export default function AdminPanel({ airports, routes, onRefresh }: AdminPanelPr
       is_hub: newIsHub,
       min_daily_pax: newIsHub ? 3000 : newMinPax,
       max_daily_pax: newIsHub ? 5000 : newMaxPax,
+      min_daily_cargo_kg: newIsHub ? 40000 : 8000,
+      max_daily_cargo_kg: newIsHub ? 120000 : 35000,
     });
     if (error) {
       setUploadError(error.message);
@@ -65,6 +67,11 @@ export default function AdminPanel({ airports, routes, onRefresh }: AdminPanelPr
 
   async function updateAirportPax(id: string, minPax: number, maxPax: number) {
     await supabase.from('airports').update({ min_daily_pax: minPax, max_daily_pax: maxPax }).eq('id', id);
+    onRefresh();
+  }
+
+  async function updateAirportCargo(id: string, minCargo: number, maxCargo: number) {
+    await supabase.from('airports').update({ min_daily_cargo_kg: minCargo, max_daily_cargo_kg: maxCargo }).eq('id', id);
     onRefresh();
   }
 
@@ -118,12 +125,13 @@ export default function AdminPanel({ airports, routes, onRefresh }: AdminPanelPr
       duration_minutes: newRoute.duration_minutes || 60,
       airframes: newRoute.airframes || null,
       is_active: true,
-      flight_type: 'pax',
+      flight_type: newRoute.flight_type || 'pax',
+      cargo_price_per_kg: newRoute.cargo_price_per_kg || 0.45,
     });
     if (error) {
       setUploadError(error.message);
     } else {
-      setNewRoute({ flight_number: '', departure_icao: '', arrival_icao: '', duration_minutes: 0, airframes: '' });
+      setNewRoute({ flight_number: '', departure_icao: '', arrival_icao: '', duration_minutes: 0, airframes: '', flight_type: 'pax', cargo_price_per_kg: 0.45 });
       setShowAddRoute(false);
       onRefresh();
     }
@@ -367,6 +375,8 @@ export default function AdminPanel({ airports, routes, onRefresh }: AdminPanelPr
                     <th className="px-4 py-3 text-left text-slate-400 font-medium">Type</th>
                     <th className="px-4 py-3 text-left text-slate-400 font-medium">Min PAX/Day</th>
                     <th className="px-4 py-3 text-left text-slate-400 font-medium">Max PAX/Day</th>
+                    <th className="px-4 py-3 text-left text-slate-400 font-medium">Min Cargo/Day (kg)</th>
+                    <th className="px-4 py-3 text-left text-slate-400 font-medium">Max Cargo/Day (kg)</th>
                     <th className="px-4 py-3 text-right text-slate-400 font-medium">Actions</th>
                   </tr>
                 </thead>
@@ -402,6 +412,22 @@ export default function AdminPanel({ airports, routes, onRefresh }: AdminPanelPr
                           defaultValue={airport.max_daily_pax}
                           onBlur={(e) => updateAirportPax(airport.id, airport.min_daily_pax, Number(e.target.value))}
                           className="w-20 px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-sm"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="number"
+                          defaultValue={airport.min_daily_cargo_kg}
+                          onBlur={(e) => updateAirportCargo(airport.id, Number(e.target.value), airport.max_daily_cargo_kg)}
+                          className="w-24 px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-sm"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="number"
+                          defaultValue={airport.max_daily_cargo_kg}
+                          onBlur={(e) => updateAirportCargo(airport.id, airport.min_daily_cargo_kg, Number(e.target.value))}
+                          className="w-24 px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-sm"
                         />
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -535,6 +561,22 @@ export default function AdminPanel({ airports, routes, onRefresh }: AdminPanelPr
                   onChange={e => setNewRoute({ ...newRoute, airframes: e.target.value })}
                   placeholder="Airframe (optional)"
                   className="px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 text-sm focus:ring-2 focus:ring-sky-500"
+                />
+                <select
+                  value={newRoute.flight_type}
+                  onChange={e => setNewRoute({ ...newRoute, flight_type: e.target.value })}
+                  className="px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-sky-500"
+                >
+                  <option value="pax">PAX</option>
+                  <option value="cargo">Cargo</option>
+                </select>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={newRoute.cargo_price_per_kg || ''}
+                  onChange={e => setNewRoute({ ...newRoute, cargo_price_per_kg: Number(e.target.value) })}
+                  placeholder="$/kg (0.45)"
+                  className="px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 text-sm focus:ring-2 focus:ring-sky-500 w-28"
                 />
                 <button
                   type="submit"

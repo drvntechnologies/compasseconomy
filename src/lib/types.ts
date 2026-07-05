@@ -13,6 +13,8 @@ export interface Airport {
   is_hub: boolean;
   min_daily_pax: number;
   max_daily_pax: number;
+  min_daily_cargo_kg: number;
+  max_daily_cargo_kg: number;
   latitude: number | null;
   longitude: number | null;
   created_at: string;
@@ -29,6 +31,7 @@ export interface Route {
   airframes: string;
   is_active: boolean;
   ticket_price_usd: number;
+  cargo_price_per_kg: number;
   created_at: string;
 }
 
@@ -38,6 +41,19 @@ export interface PaxPool {
   destination_icao: string;
   current_airport_icao: string;
   pax_count: number;
+  status: 'waiting' | 'in_transit' | 'layover' | 'arrived';
+  connections_remaining: number;
+  booking_id: string | null;
+  generated_date: string;
+  created_at: string;
+}
+
+export interface CargoPool {
+  id: string;
+  origin_icao: string;
+  destination_icao: string;
+  current_airport_icao: string;
+  weight_kg: number;
   status: 'waiting' | 'in_transit' | 'layover' | 'arrived';
   connections_remaining: number;
   booking_id: string | null;
@@ -72,6 +88,7 @@ export interface FlightBooking {
   arrival_icao: string;
   departure_time_utc: string;
   pax_count: number;
+  cargo_kg: number;
   status: 'booked' | 'in_progress' | 'completed' | 'cancelled';
   aircraft_id: string | null;
   engine_hours: number | null;
@@ -86,6 +103,11 @@ export interface Aircraft {
   aircraft_type: string;
   size_category: SizeCategory;
   max_pax: number;
+  is_freighter: boolean;
+  max_cargo_kg: number;
+  oew_kg: number | null;
+  mtow_kg: number | null;
+  mlw_kg: number | null;
   current_airport_icao: string;
   status: 'available' | 'reserved' | 'in_flight' | 'maintenance';
   reserved_by_booking_id: string | null;
@@ -164,7 +186,7 @@ export const AIRCRAFT_SIZE_MAP: Record<string, SizeCategory> = {
   'DHC-8': 'small',
 };
 
-export type TransactionType = 'ticket_revenue' | 'engine_cost' | 'gate_fee' | 'aircraft_lease' | 'adjustment';
+export type TransactionType = 'ticket_revenue' | 'cargo_revenue' | 'engine_cost' | 'gate_fee' | 'aircraft_lease' | 'adjustment';
 
 export interface AirlineFinancials {
   id: number;

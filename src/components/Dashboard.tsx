@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Airport, Route, PaxPool, FlightLog, Notam } from '../lib/types';
-import { Users, Plane, MapPin, ArrowRight, Clock, CheckCircle, ExternalLink, RefreshCw, TrendingUp, Trophy, DollarSign, AlertTriangle, Info, AlertCircle, Plus, X, Send } from 'lucide-react';
+import { Users, Plane, MapPin, ArrowRight, Clock, CheckCircle, ExternalLink, RefreshCw, TrendingUp, Trophy, DollarSign, AlertTriangle, Info, AlertCircle, Plus, X, Send, Package } from 'lucide-react';
 import AirportDetailModal from './AirportDetailModal';
 import LiveMap from './LiveMap';
 
@@ -42,6 +42,7 @@ export default function Dashboard({ airports, routes, userRole }: DashboardProps
   const [todayFlown, setTodayFlown] = useState(0);
   const [todayFlights, setTodayFlights] = useState(0);
   const [todayRevenue, setTodayRevenue] = useState(0);
+  const [todayCargoRevenue, setTodayCargoRevenue] = useState(0);
   const [pilotLeaderboard, setPilotLeaderboard] = useState<PilotStats[]>([]);
 
   const [notams, setNotams] = useState<Notam[]>([]);
@@ -95,12 +96,14 @@ export default function Dashboard({ airports, routes, userRole }: DashboardProps
       todayGenRes,
       todayLogsRes,
       todayRevenueRes,
+      todayCargoRevRes,
       pilotLogsRes,
       profilesRes,
     ] = await Promise.all([
       supabase.from('pax_pools').select('pax_count').eq('generated_date', operationalDate),
       supabase.from('flight_logs').select('*').gte('created_at', operationalStartISO),
       supabase.from('financial_transactions').select('amount').eq('type', 'ticket_revenue').gte('created_at', operationalStartISO),
+      supabase.from('financial_transactions').select('amount').eq('type', 'cargo_revenue').gte('created_at', operationalStartISO),
       supabase.from('flight_logs').select('user_id, pax_count, flight_number').gte('flight_date', weekAgo),
       supabase.from('profiles').select('id, display_name'),
     ]);
@@ -113,6 +116,7 @@ export default function Dashboard({ airports, routes, userRole }: DashboardProps
     setTodayFlights(todayLogs.length);
 
     setTodayRevenue((todayRevenueRes.data || []).reduce((s, t) => s + Number(t.amount), 0));
+    setTodayCargoRevenue((todayCargoRevRes.data || []).reduce((s, t) => s + Number(t.amount), 0));
 
     const profiles = profilesRes.data || [];
     const profileMap: Record<string, string> = {};
@@ -367,8 +371,13 @@ export default function Dashboard({ airports, routes, userRole }: DashboardProps
               <DollarSign className="w-4 h-4 text-emerald-400" />
               <span className="text-slate-400 text-xs font-medium">Revenue</span>
             </div>
-            <p className="text-2xl font-bold text-white">${todayRevenue.toLocaleString()}</p>
-            <p className="text-slate-500 text-[10px] mt-1">ticket revenue</p>
+            <p className="text-2xl font-bold text-white">${(todayRevenue + todayCargoRevenue).toLocaleString()}</p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-slate-500 text-[10px]">${todayRevenue.toLocaleString()} pax</span>
+              {todayCargoRevenue > 0 && (
+                <span className="text-teal-400 text-[10px]">+ ${todayCargoRevenue.toLocaleString()} cargo</span>
+              )}
+            </div>
           </div>
 
           {/* Demand */}

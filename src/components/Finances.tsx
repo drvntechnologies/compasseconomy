@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import type { AirlineFinancials, FinancialTransaction, MonthlyBillingLog, Aircraft, Gate, TransactionType } from '../lib/types';
-import { DollarSign, TrendingUp, Calendar, Filter, AlertCircle, CheckCircle, Banknote, Plane, DoorOpen, Wrench, Pencil, X } from 'lucide-react';
+import { DollarSign, TrendingUp, Calendar, Filter, AlertCircle, CheckCircle, Banknote, Plane, DoorOpen, Wrench, Pencil, X, Package } from 'lucide-react';
 
 interface FinancesProps {
   isAdmin: boolean;
@@ -9,6 +9,7 @@ interface FinancesProps {
 
 const TYPE_STYLES: Record<TransactionType, { bg: string; text: string; label: string; icon: typeof DollarSign }> = {
   ticket_revenue: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', label: 'Ticket Revenue', icon: TrendingUp },
+  cargo_revenue: { bg: 'bg-teal-500/10', text: 'text-teal-400', label: 'Cargo Revenue', icon: Package },
   engine_cost: { bg: 'bg-red-500/10', text: 'text-red-400', label: 'Engine Cost', icon: Plane },
   gate_fee: { bg: 'bg-amber-500/10', text: 'text-amber-400', label: 'Gate Fee', icon: DoorOpen },
   aircraft_lease: { bg: 'bg-sky-500/10', text: 'text-sky-400', label: 'Aircraft Lease', icon: Wrench },
@@ -348,6 +349,7 @@ export default function Finances({ isAdmin }: FinancesProps) {
             >
               <option value="">All types</option>
               <option value="ticket_revenue">Ticket Revenue</option>
+              <option value="cargo_revenue">Cargo Revenue</option>
               <option value="engine_cost">Engine Cost</option>
               <option value="gate_fee">Gate Fee</option>
               <option value="aircraft_lease">Aircraft Lease</option>

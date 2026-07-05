@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Airport, Route } from '../lib/types';
-import { TrendingUp, AlertTriangle, CheckCircle, ArrowRight, BarChart3 } from 'lucide-react';
+import { TrendingUp, AlertTriangle, CheckCircle, ArrowRight, BarChart3, Package } from 'lucide-react';
 
 interface AnalyticsProps {
   airports: Airport[];
@@ -33,10 +33,26 @@ interface DemandHistoryEntry {
   airports: number;
 }
 
+interface CargoAirportSummary {
+  icao: string;
+  waitingKg: number;
+  poolCount: number;
+}
+
+interface CargoHistoryEntry {
+  date: string;
+  totalKg: number;
+  airports: number;
+}
+
 export default function Analytics({ airports, routes }: AnalyticsProps) {
   const [health, setHealth] = useState<AirportHealth[]>([]);
   const [routeUtil, setRouteUtil] = useState<RouteUtilization[]>([]);
   const [demandHistory, setDemandHistory] = useState<DemandHistoryEntry[]>([]);
+  const [cargoByAirport, setCargoByAirport] = useState<CargoAirportSummary[]>([]);
+  const [cargoHistory, setCargoHistory] = useState<CargoHistoryEntry[]>([]);
+  const [totalCargoWaiting, setTotalCargoWaiting] = useState(0);
+  const [totalCargoInTransit, setTotalCargoInTransit] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { fetchAnalytics(); }, [airports, routes]);
@@ -64,14 +80,18 @@ export default function Analytics({ airports, routes }: AnalyticsProps) {
 
   async function fetchAnalytics() {
     setLoading(true);
-    const [pools, logsRes, demandRes] = await Promise.all([
+    const [pools, logsRes, demandRes, cargoPoolsRes, cargoGenRes] = await Promise.all([
       fetchAllPools(),
       supabase.from('flight_logs').select('flight_number, departure_icao, arrival_icao, pax_count, flight_date'),
       supabase.from('demand_generation_log').select('airport_icao, pax_generated, generation_date').order('generation_date', { ascending: false }),
+      supabase.from('cargo_pools').select('current_airport_icao, status, weight_kg'),
+      supabase.from('cargo_generation_log').select('airport_icao, cargo_generated_kg, generation_date').order('generation_date', { ascending: false }),
     ]);
 
     const flightLogs = logsRes.data || [];
     const demandLogs = demandRes.data || [];
+    const cargoPools = cargoPoolsRes.data || [];
+    const cargoGenLogs = cargoGenRes.data || [];
 
     // Airport health
     const healthMap: Record<string, AirportHealth> = {};
@@ -132,6 +152,37 @@ export default function Analytics({ airports, routes }: AnalyticsProps) {
     }
     setDemandHistory(Object.values(historyMap).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 14));
 
+    // Cargo analytics
+    let waitingKg = 0;
+    let inTransitKg = 0;
+    const cargoAirportMap: Record<string, CargoAirportSummary> = {};
+    for (const cp of cargoPools) {
+      if (cp.status === 'waiting') {
+        waitingKg += cp.weight_kg;
+        if (!cargoAirportMap[cp.current_airport_icao]) {
+          cargoAirportMap[cp.current_airport_icao] = { icao: cp.current_airport_icao, waitingKg: 0, poolCount: 0 };
+        }
+        cargoAirportMap[cp.current_airport_icao].waitingKg += cp.weight_kg;
+        cargoAirportMap[cp.current_airport_icao].poolCount += 1;
+      } else if (cp.status === 'in_transit') {
+        inTransitKg += cp.weight_kg;
+      }
+    }
+    setTotalCargoWaiting(waitingKg);
+    setTotalCargoInTransit(inTransitKg);
+    setCargoByAirport(Object.values(cargoAirportMap).sort((a, b) => b.waitingKg - a.waitingKg));
+
+    // Cargo generation history
+    const cargoHistMap: Record<string, CargoHistoryEntry> = {};
+    for (const log of cargoGenLogs) {
+      if (!cargoHistMap[log.generation_date]) {
+        cargoHistMap[log.generation_date] = { date: log.generation_date, totalKg: 0, airports: 0 };
+      }
+      cargoHistMap[log.generation_date].totalKg += log.cargo_generated_kg;
+      cargoHistMap[log.generation_date].airports += 1;
+    }
+    setCargoHistory(Object.values(cargoHistMap).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 14));
+
     setLoading(false);
   }
 
@@ -154,11 +205,13 @@ export default function Analytics({ airports, routes }: AnalyticsProps) {
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <SummaryCard label="Total Waiting" value={totalWaiting} color="text-amber-400" />
-        <SummaryCard label="Total Arrived" value={totalArrived} color="text-emerald-400" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <SummaryCard label="PAX Waiting" value={totalWaiting} color="text-amber-400" />
+        <SummaryCard label="PAX Arrived" value={totalArrived} color="text-emerald-400" />
         <SummaryCard label="Flights Logged" value={totalFlown} color="text-sky-400" />
         <SummaryCard label="PAX Moved" value={totalPaxMoved} color="text-cyan-400" />
+        <SummaryCard label="Cargo Waiting" value={Math.round(totalCargoWaiting / 1000)} suffix="t" color="text-teal-400" />
+        <SummaryCard label="Cargo In Transit" value={Math.round(totalCargoInTransit / 1000)} suffix="t" color="text-teal-300" />
       </div>
 
       {/* Network Health */}
@@ -273,7 +326,7 @@ export default function Analytics({ airports, routes }: AnalyticsProps) {
       {/* Demand History */}
       {demandHistory.length > 0 && (
         <div className="bg-slate-800 rounded-xl border border-slate-700 p-5">
-          <h3 className="text-white font-semibold mb-4">Demand Generation History</h3>
+          <h3 className="text-white font-semibold mb-4">PAX Demand Generation History</h3>
           <div className="space-y-2 max-h-64 overflow-y-auto">
             {demandHistory.map(entry => {
               const maxGenerated = Math.max(...demandHistory.map(d => d.totalGenerated));
@@ -292,15 +345,71 @@ export default function Analytics({ airports, routes }: AnalyticsProps) {
           </div>
         </div>
       )}
+
+      {/* Cargo Analytics */}
+      <div className="bg-slate-800 rounded-xl border border-slate-700 p-5">
+        <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+          <Package className="w-4 h-4 text-teal-400" />
+          Cargo Network
+          <span className="text-xs text-slate-500 ml-2">
+            {(totalCargoWaiting / 1000).toFixed(1)}t waiting | {(totalCargoInTransit / 1000).toFixed(1)}t in transit
+          </span>
+        </h3>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Cargo by airport */}
+          <div>
+            <p className="text-xs text-teal-400 font-medium uppercase tracking-wide mb-2">Cargo Waiting by Airport</p>
+            <div className="space-y-1.5 max-h-64 overflow-y-auto">
+              {cargoByAirport.length === 0 && <p className="text-slate-500 text-xs">No cargo waiting at any airport</p>}
+              {cargoByAirport.slice(0, 15).map(ca => {
+                const maxKg = cargoByAirport[0]?.waitingKg || 1;
+                const pct = (ca.waitingKg / maxKg) * 100;
+                return (
+                  <div key={ca.icao} className="relative flex items-center justify-between p-2.5 rounded-lg bg-slate-900/50">
+                    <div className="absolute inset-0 bg-teal-500/5 rounded-lg" style={{ width: `${pct}%` }} />
+                    <div className="relative flex items-center gap-2">
+                      <span className="text-white font-mono font-bold text-sm">{ca.icao}</span>
+                      <span className="text-slate-500 text-[10px]">{ca.poolCount} shipments</span>
+                    </div>
+                    <span className="relative text-teal-300 text-sm font-semibold">{(ca.waitingKg / 1000).toFixed(1)}t</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Cargo generation history */}
+          <div>
+            <p className="text-xs text-teal-400 font-medium uppercase tracking-wide mb-2">Cargo Generation History</p>
+            <div className="space-y-1.5 max-h-64 overflow-y-auto">
+              {cargoHistory.length === 0 && <p className="text-slate-500 text-xs">No cargo generation logs yet</p>}
+              {cargoHistory.map(entry => {
+                const maxKg = Math.max(...cargoHistory.map(d => d.totalKg));
+                const pct = maxKg > 0 ? (entry.totalKg / maxKg) * 100 : 0;
+                return (
+                  <div key={entry.date} className="relative flex items-center justify-between p-2.5 rounded-lg bg-slate-900/50">
+                    <div className="absolute inset-0 bg-teal-500/5 rounded-lg" style={{ width: `${pct}%` }} />
+                    <span className="relative text-white text-sm font-mono">{entry.date}</span>
+                    <div className="relative flex items-center gap-4 text-xs">
+                      <span className="text-slate-400">{entry.airports} airports</span>
+                      <span className="text-teal-300 font-semibold">{(entry.totalKg / 1000).toFixed(1)}t</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-function SummaryCard({ label, value, color }: { label: string; value: number; color: string }) {
+function SummaryCard({ label, value, color, suffix }: { label: string; value: number; color: string; suffix?: string }) {
   return (
     <div className="bg-slate-800 rounded-xl border border-slate-700 p-4">
       <p className="text-slate-400 text-xs mb-1">{label}</p>
-      <p className={`text-xl font-bold ${color}`}>{value.toLocaleString()}</p>
+      <p className={`text-xl font-bold ${color}`}>{value.toLocaleString()}{suffix ? suffix : ''}</p>
     </div>
   );
 }

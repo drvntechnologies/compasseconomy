@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import type { Airport, Route, PaxPool, FlightBooking, Aircraft, Gate, SizeCategory } from '../lib/types';
-import { Plane, Clock, Users, MapPin, ArrowRight, CheckCircle, XCircle, AlertCircle, Radio, DoorOpen, DollarSign, Timer, RefreshCw, FileText } from 'lucide-react';
+import type { Airport, Route, PaxPool, CargoPool, FlightBooking, Aircraft, Gate, SizeCategory } from '../lib/types';
+import { Plane, Clock, Users, MapPin, ArrowRight, CheckCircle, XCircle, AlertCircle, Radio, DoorOpen, DollarSign, Timer, RefreshCw, FileText, Package } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
 import SimBriefModal, { getSimBriefType } from './SimBriefModal';
 
@@ -22,6 +22,7 @@ function getCompatibleGateTypes(aircraftSize: SizeCategory): SizeCategory[] {
 export default function Dispatch({ airports, routes, currentUserId, isAdmin }: DispatchProps) {
   const [bookings, setBookings] = useState<FlightBooking[]>([]);
   const [bookedPaxMap, setBookedPaxMap] = useState<Record<string, PaxPool[]>>({});
+  const [bookedCargoMap, setBookedCargoMap] = useState<Record<string, CargoPool[]>>({});
   const [loading, setLoading] = useState(true);
 
   // Aircraft state
@@ -110,6 +111,7 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
       setBookings(bookingData);
       fetchPilotNames(bookingData);
       const map: Record<string, PaxPool[]> = {};
+      const cargoMap: Record<string, CargoPool[]> = {};
       const acMap: Record<string, Aircraft> = {};
       const gateMap: Record<string, Gate> = {};
 
@@ -119,6 +121,12 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
           .select('*')
           .eq('booking_id', b.id);
         if (pools) map[b.id] = pools;
+
+        const { data: cargoPools } = await supabase
+          .from('cargo_pools')
+          .select('*')
+          .eq('booking_id', b.id);
+        if (cargoPools) cargoMap[b.id] = cargoPools;
 
         if (b.aircraft_id) {
           const { data: ac } = await supabase
@@ -152,6 +160,7 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
       }
 
       setBookedPaxMap(map);
+      setBookedCargoMap(cargoMap);
       setBookingAircraftMap(acMap);
       setGateAssignments(gateMap);
       setDepartureGateMap(depGateMap);
@@ -192,6 +201,7 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
       setBookings(bookingData);
       fetchPilotNames(bookingData);
       const map: Record<string, PaxPool[]> = {};
+      const cargoMap: Record<string, CargoPool[]> = {};
       const acMap: Record<string, Aircraft> = {};
       const gateMap: Record<string, Gate> = {};
 
@@ -201,6 +211,12 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
           .select('*')
           .eq('booking_id', b.id);
         if (pools) map[b.id] = pools;
+
+        const { data: cargoPools } = await supabase
+          .from('cargo_pools')
+          .select('*')
+          .eq('booking_id', b.id);
+        if (cargoPools) cargoMap[b.id] = cargoPools;
 
         if (b.aircraft_id) {
           const { data: ac } = await supabase
@@ -234,6 +250,7 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
       }
 
       setBookedPaxMap(map);
+      setBookedCargoMap(cargoMap);
       setBookingAircraftMap(acMap);
       setGateAssignments(gateMap);
       setDepartureGateMap(depGateMap);
@@ -246,13 +263,21 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
     setBookingError('');
     setBookingSuccess('');
 
-    if (!departure || !arrival || !departureTime || requestedPax <= 0) {
+    if (!departure || !arrival || !departureTime) {
       setBookingError('Please fill in all fields.');
       return;
     }
 
     if (!selectedAircraftId) {
       setBookingError('Please select an aircraft.');
+      return;
+    }
+
+    const selAc = availableAircraft.find(a => a.id === selectedAircraftId);
+    const isFreighter = selAc?.is_freighter || false;
+
+    if (!isFreighter && requestedPax <= 0) {
+      setBookingError('Please specify passenger count (or select a freighter for cargo-only).');
       return;
     }
 
@@ -428,10 +453,98 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
       return;
     }
 
+    // --- CARGO LOADING ---
+    // Calculate available cargo capacity based on aircraft weight limits
+    const avgPaxWeightKg = 95; // pax + bags
+    let cargoCapacityKg = 0;
+    if (selAc) {
+      if (selAc.is_freighter) {
+        cargoCapacityKg = selAc.max_cargo_kg;
+      } else if (selAc.mtow_kg && selAc.oew_kg) {
+        // Belly cargo: MTOW - OEW - pax weight - estimated fuel (30% of MTOW-OEW as fuel reserve)
+        const paxWeight = actualPax * avgPaxWeightKg;
+        const fuelEstimate = (selAc.mtow_kg - selAc.oew_kg) * 0.3;
+        cargoCapacityKg = Math.max(0, Math.min(
+          selAc.max_cargo_kg,
+          selAc.mtow_kg - selAc.oew_kg - paxWeight - fuelEstimate
+        ));
+      } else {
+        cargoCapacityKg = selAc.max_cargo_kg;
+      }
+    }
+
+    let totalCargoLoaded = 0;
+    if (cargoCapacityKg > 0) {
+      // Fetch available cargo at departure airport
+      const { data: availableCargo } = await supabase
+        .from('cargo_pools')
+        .select('*')
+        .eq('current_airport_icao', departureIcao)
+        .in('status', ['waiting', 'layover'])
+        .is('booking_id', null)
+        .order('weight_kg', { ascending: false })
+        .limit(200);
+
+      if (availableCargo && availableCargo.length > 0) {
+        // Filter by reachability (same logic as pax)
+        const eligibleCargo = availableCargo.filter(c => {
+          if (c.destination_icao === arrivalIcao) return true;
+          if (c.connections_remaining > 0) {
+            if (destsFromArrival.has(c.destination_icao)) return true;
+            if (c.connections_remaining > 1 && destsFromArrival2Hop.has(c.destination_icao)) return true;
+          }
+          return false;
+        }).sort((a, b) => {
+          const aTerminating = a.destination_icao === arrivalIcao ? 0 : 1;
+          const bTerminating = b.destination_icao === arrivalIcao ? 0 : 1;
+          if (aTerminating !== bTerminating) return aTerminating - bTerminating;
+          return b.weight_kg - a.weight_kg;
+        });
+
+        let remainingCapacity = cargoCapacityKg;
+        for (const cargo of eligibleCargo) {
+          if (remainingCapacity <= 0) break;
+          const loadKg = Math.min(cargo.weight_kg, remainingCapacity);
+          remainingCapacity -= loadKg;
+
+          if (loadKg === cargo.weight_kg) {
+            await supabase.from('cargo_pools').update({
+              status: 'in_transit',
+              booking_id: booking.id,
+            }).eq('id', cargo.id);
+          } else {
+            // Split: reduce original, create allocated portion
+            await supabase.from('cargo_pools').update({
+              weight_kg: cargo.weight_kg - loadKg,
+            }).eq('id', cargo.id);
+            await supabase.from('cargo_pools').insert({
+              origin_icao: cargo.origin_icao,
+              destination_icao: cargo.destination_icao,
+              current_airport_icao: cargo.current_airport_icao,
+              weight_kg: loadKg,
+              status: 'in_transit',
+              connections_remaining: cargo.connections_remaining,
+              generated_date: cargo.generated_date,
+              booking_id: booking.id,
+            });
+          }
+          totalCargoLoaded += loadKg;
+        }
+
+        // Update booking with cargo weight
+        if (totalCargoLoaded > 0) {
+          await supabase.from('flight_bookings').update({
+            cargo_kg: totalCargoLoaded,
+          }).eq('id', booking.id);
+        }
+      }
+    }
+
     const cappedNote = actualPax < requestedPax
       ? ` (${actualPax} of ${requestedPax} requested available)`
       : '';
-    setBookingSuccess(`Flight booked! ${actualPax} PAX reserved ${departureIcao} -> ${arrivalIcao}${cappedNote}`);
+    const cargoNote = totalCargoLoaded > 0 ? ` + ${(totalCargoLoaded / 1000).toFixed(1)}t cargo` : '';
+    setBookingSuccess(`Flight booked! ${actualPax} PAX${cargoNote} reserved ${departureIcao} -> ${arrivalIcao}${cappedNote}`);
     setDeparture('');
     setArrival('');
     setFlightNumber('');
@@ -546,6 +659,34 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
       }
     }
 
+    // Process cargo pools for this booking
+    const { data: cargoPoolsForBooking } = await supabase
+      .from('cargo_pools')
+      .select('*')
+      .eq('booking_id', bookingId);
+
+    let arrivedCargoKg = 0;
+    if (cargoPoolsForBooking) {
+      for (const cargo of cargoPoolsForBooking) {
+        if (cargo.destination_icao === arrivalIcao) {
+          arrivedCargoKg += cargo.weight_kg;
+          await supabase.from('cargo_pools').update({
+            current_airport_icao: arrivalIcao,
+            status: 'arrived',
+            connections_remaining: 0,
+            booking_id: null,
+          }).eq('id', cargo.id);
+        } else {
+          await supabase.from('cargo_pools').update({
+            current_airport_icao: arrivalIcao,
+            status: 'layover',
+            connections_remaining: Math.max(0, cargo.connections_remaining - 1),
+            booking_id: null,
+          }).eq('id', cargo.id);
+        }
+      }
+    }
+
     // Mark booking as completed with engine hours
     await supabase.from('flight_bookings').update({
       status: 'completed',
@@ -636,6 +777,21 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
       });
     }
 
+    // Cargo revenue: price per kg * arrived cargo
+    if (arrivedCargoKg > 0) {
+      const route = routes.find(r => r.flight_number === booking.flight_number);
+      const cargoRate = route?.cargo_price_per_kg ?? 0.45;
+      const cargoRevenue = arrivedCargoKg * cargoRate;
+      balanceChange += cargoRevenue;
+
+      await supabase.from('financial_transactions').insert({
+        type: 'cargo_revenue',
+        amount: cargoRevenue,
+        description: `CPZ${booking.flight_number} ${booking.departure_icao}->${arrivalIcao}: ${(arrivedCargoKg / 1000).toFixed(1)}t cargo @ $${cargoRate}/kg`,
+        reference_id: bookingId,
+      });
+    }
+
     // Engine cost: hours * hourly rate
     const ac = bookingAircraftMap[bookingId];
     if (ac && ac.hourly_cost_usd > 0) {
@@ -692,6 +848,21 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
       }
     }
 
+    // Release all reserved cargo pools
+    const { data: cargoPools } = await supabase
+      .from('cargo_pools')
+      .select('*')
+      .eq('booking_id', bookingId);
+
+    if (cargoPools) {
+      for (const cargo of cargoPools) {
+        await supabase.from('cargo_pools').update({
+          status: 'waiting',
+          booking_id: null,
+        }).eq('id', cargo.id);
+      }
+    }
+
     // Release the aircraft
     if (booking?.aircraft_id) {
       await supabase.from('aircraft').update({
@@ -733,8 +904,12 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
   function handleAircraftSelect(acId: string) {
     setSelectedAircraftId(acId);
     const ac = availableAircraft.find(a => a.id === acId);
-    if (ac && ac.max_pax > 0) {
-      setRequestedPax(ac.max_pax);
+    if (ac) {
+      if (ac.is_freighter) {
+        setRequestedPax(0);
+      } else if (ac.max_pax > 0) {
+        setRequestedPax(ac.max_pax);
+      }
     }
   }
 
@@ -840,13 +1015,14 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
                 </option>
                 {departureAircraft.map(ac => (
                   <option key={ac.id} value={ac.id}>
-                    {ac.tail_number} - {ac.aircraft_type} ({ac.max_pax} PAX)
+                    {ac.tail_number} - {ac.aircraft_type} ({ac.is_freighter ? `${(ac.max_cargo_kg / 1000).toFixed(0)}t cargo` : `${ac.max_pax} PAX`})
                   </option>
                 ))}
               </select>
               {selectedAircraft && (
                 <p className="text-[11px] text-slate-500 mt-1">
-                  {selectedAircraft.aircraft_type} | Max {selectedAircraft.max_pax} PAX | {selectedAircraft.size_category.charAt(0).toUpperCase() + selectedAircraft.size_category.slice(1)}
+                  {selectedAircraft.aircraft_type} | {selectedAircraft.is_freighter ? 'Freighter' : `Max ${selectedAircraft.max_pax} PAX`} | {selectedAircraft.size_category.charAt(0).toUpperCase() + selectedAircraft.size_category.slice(1)}
+                  {selectedAircraft.max_cargo_kg > 0 && ` | Cargo: ${(selectedAircraft.max_cargo_kg / 1000).toFixed(0)}t`}
                 </p>
               )}
             </div>
@@ -866,10 +1042,10 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
             <div className="flex items-end">
               <button
                 type="submit"
-                disabled={submitting || !departure || !arrival || !departureTime || requestedPax <= 0 || !selectedAircraftId}
+                disabled={submitting || !departure || !arrival || !departureTime || (!selectedAircraft?.is_freighter && requestedPax <= 0) || !selectedAircraftId}
                 className="w-full py-2.5 bg-sky-500 hover:bg-sky-400 disabled:bg-slate-600 disabled:text-slate-400 text-white text-sm font-semibold rounded-lg transition-all shadow-lg shadow-sky-500/20"
               >
-                {submitting ? 'Booking...' : 'Book & Reserve PAX'}
+                {submitting ? 'Booking...' : selectedAircraft?.is_freighter ? 'Book & Load Cargo' : 'Book & Reserve PAX'}
               </button>
             </div>
           </div>
@@ -920,6 +1096,8 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
           <div className="divide-y divide-slate-700/50">
             {bookings.map(booking => {
               const paxForBooking = bookedPaxMap[booking.id] || [];
+              const cargoForBooking = bookedCargoMap[booking.id] || [];
+              const totalCargoKg = cargoForBooking.reduce((s, c) => s + c.weight_kg, 0);
               const terminatingPax = paxForBooking
                 .filter(p => p.destination_icao === booking.arrival_icao)
                 .reduce((s, p) => s + p.pax_count, 0);
@@ -988,12 +1166,12 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
                         )}
                       </div>
 
-                      {/* PAX summary */}
+                      {/* PAX & Cargo summary */}
                       <div className="flex items-center gap-3 sm:gap-4 text-sm flex-wrap">
                         <div className="flex items-center gap-1.5">
                           <Users className="w-3.5 h-3.5 text-sky-400" />
                           <span className="text-white font-semibold">{booking.pax_count}</span>
-                          <span className="text-slate-400">total PAX</span>
+                          <span className="text-slate-400">PAX</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <MapPin className="w-3.5 h-3.5 text-emerald-400" />
@@ -1005,6 +1183,13 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
                           <span className="text-violet-400">{connectingPax}</span>
                           <span className="text-slate-500">connecting</span>
                         </div>
+                        {totalCargoKg > 0 && (
+                          <div className="flex items-center gap-1.5">
+                            <Package className="w-3.5 h-3.5 text-teal-400" />
+                            <span className="text-teal-400 font-semibold">{(totalCargoKg / 1000).toFixed(1)}t</span>
+                            <span className="text-slate-500">cargo</span>
+                          </div>
+                        )}
                       </div>
 
                       {/* Passenger details */}
@@ -1133,6 +1318,10 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
             destination={booking.arrival_icao}
             aircraftIcao={getSimBriefType(ac.aircraft_type)}
             pax={booking.pax_count}
+            cargoKg={booking.cargo_kg}
+            oewKg={ac.oew_kg}
+            mtowKg={ac.mtow_kg}
+            mlwKg={ac.mlw_kg}
             onClose={() => setSimbriefBookingId(null)}
           />
         );
