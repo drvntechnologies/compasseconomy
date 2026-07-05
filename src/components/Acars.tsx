@@ -6,10 +6,11 @@ import type { Airport, Route, FlightBooking, Aircraft, PaxPool, AcarsFlight, Fli
 import { FLIGHT_PHASES, FLIGHT_PHASE_LABELS } from '../lib/types';
 import { getChecklistForAircraft } from '../lib/checklists';
 import type { ChecklistSection } from '../lib/checklists';
+import SimBriefModal, { getSimBriefType, buildSimBriefUrl } from './SimBriefModal';
 import {
   Radar, AlertTriangle, Plane, Play, Square, ChevronRight, Users, MapPin,
   ArrowRight, Clock, Gauge, Compass, TrendingUp, TrendingDown, Fuel, RefreshCw,
-  Radio, ClipboardList, Check, ChevronLeft, RotateCcw, DoorOpen, Wifi, WifiOff
+  Radio, ClipboardList, Check, ChevronLeft, RotateCcw, DoorOpen, Wifi, WifiOff, FileText
 } from 'lucide-react';
 
 interface AcarsProps {
@@ -53,6 +54,10 @@ function Acars({ currentUserId }: AcarsProps) {
   const [isTauriApp] = useState(() => getIsTauri());
   const [simStatus, setSimStatus] = useState<SimConnectStatus | null>(null);
   const [liveTelemetry, setLiveTelemetry] = useState<SimTelemetry | null>(null);
+
+  // OFP tab state
+  const [acarsTab, setAcarsTab] = useState<'telemetry' | 'ofp'>('telemetry');
+  const [simbriefOpen, setSimbriefOpen] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -730,120 +735,223 @@ function Acars({ currentUserId }: AcarsProps) {
                 </div>
               </div>
 
-              {/* Telemetry Grid */}
-              <div className="p-4 grid grid-cols-3 gap-3">
-                <div className="bg-slate-900/50 rounded-lg p-3 text-center">
-                  <TrendingUp className="w-4 h-4 text-sky-400 mx-auto mb-1" />
-                  <p className="text-white font-mono font-bold text-sm">
-                    {(liveTelemetry && simStatus?.tracking)
-                      ? liveTelemetry.altitude_ft.toLocaleString()
-                      : selectedAcars.altitude_ft != null ? selectedAcars.altitude_ft.toLocaleString() : '---'}
-                  </p>
-                  <p className="text-[10px] text-slate-500">ALT ft</p>
-                </div>
-                <div className="bg-slate-900/50 rounded-lg p-3 text-center">
-                  <Gauge className="w-4 h-4 text-emerald-400 mx-auto mb-1" />
-                  <p className="text-white font-mono font-bold text-sm">
-                    {(liveTelemetry && simStatus?.tracking)
-                      ? liveTelemetry.ground_speed_kts
-                      : selectedAcars.ground_speed_kts ?? '---'}
-                  </p>
-                  <p className="text-[10px] text-slate-500">GS kts</p>
-                </div>
-                <div className="bg-slate-900/50 rounded-lg p-3 text-center">
-                  <Compass className="w-4 h-4 text-amber-400 mx-auto mb-1" />
-                  <p className="text-white font-mono font-bold text-sm">
-                    {(liveTelemetry && simStatus?.tracking)
-                      ? `${liveTelemetry.heading_deg}°`
-                      : selectedAcars.heading_deg != null ? `${selectedAcars.heading_deg}°` : '---'}
-                  </p>
-                  <p className="text-[10px] text-slate-500">HDG</p>
-                </div>
-                <div className="bg-slate-900/50 rounded-lg p-3 text-center">
-                  {((liveTelemetry && simStatus?.tracking) ? liveTelemetry.vs_fpm : (selectedAcars.vs_fpm ?? 0)) >= 0
-                    ? <TrendingUp className="w-4 h-4 text-green-400 mx-auto mb-1" />
-                    : <TrendingDown className="w-4 h-4 text-red-400 mx-auto mb-1" />}
-                  <p className="text-white font-mono font-bold text-sm">
-                    {(liveTelemetry && simStatus?.tracking)
-                      ? `${liveTelemetry.vs_fpm > 0 ? '+' : ''}${liveTelemetry.vs_fpm}`
-                      : selectedAcars.vs_fpm != null ? `${selectedAcars.vs_fpm > 0 ? '+' : ''}${selectedAcars.vs_fpm}` : '---'}
-                  </p>
-                  <p className="text-[10px] text-slate-500">VS fpm</p>
-                </div>
-                <div className="bg-slate-900/50 rounded-lg p-3 text-center">
-                  <Fuel className="w-4 h-4 text-orange-400 mx-auto mb-1" />
-                  <p className="text-white font-mono font-bold text-sm">
-                    {(liveTelemetry && simStatus?.tracking)
-                      ? Math.round(liveTelemetry.fuel_lbs).toLocaleString()
-                      : selectedAcars.fuel_lbs != null ? Math.round(Number(selectedAcars.fuel_lbs)).toLocaleString() : '---'}
-                  </p>
-                  <p className="text-[10px] text-slate-500">FUEL lbs</p>
-                </div>
-                <div className="bg-slate-900/50 rounded-lg p-3 text-center">
-                  <Clock className="w-4 h-4 text-violet-400 mx-auto mb-1" />
-                  <p className="text-white font-mono font-bold text-sm">
-                    {(liveTelemetry && simStatus?.tracking)
-                      ? `${liveTelemetry.sim_rate}x`
-                      : `${selectedAcars.sim_rate}x`}
-                  </p>
-                  <p className="text-[10px] text-slate-500">SIM RATE</p>
-                </div>
+              {/* Tabs */}
+              <div className="flex border-b border-slate-700">
+                <button
+                  onClick={() => setAcarsTab('telemetry')}
+                  className={`flex-1 px-4 py-2.5 text-xs font-medium text-center transition-colors ${
+                    acarsTab === 'telemetry'
+                      ? 'text-sky-400 border-b-2 border-sky-400 bg-sky-500/5'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/30'
+                  }`}
+                >
+                  <Gauge className="w-3.5 h-3.5 inline mr-1.5" />
+                  Telemetry
+                </button>
+                <button
+                  onClick={() => setAcarsTab('ofp')}
+                  className={`flex-1 px-4 py-2.5 text-xs font-medium text-center transition-colors ${
+                    acarsTab === 'ofp'
+                      ? 'text-sky-400 border-b-2 border-sky-400 bg-sky-500/5'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/30'
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5 inline mr-1.5" />
+                  OFP / SimBrief
+                </button>
               </div>
 
-              {/* Phase Stepper Controls */}
-              <div className="px-4 pb-4">
-                <p className="text-xs text-slate-400 font-medium mb-2">Flight Phase Controls (Dev Sim)</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {FLIGHT_PHASES.map((phase, idx) => {
-                    const currentIdx = FLIGHT_PHASES.indexOf(selectedAcars.phase);
-                    const isActive = idx === currentIdx;
-                    const isPast = idx < currentIdx;
-                    const isNext = idx === currentIdx + 1;
-                    return (
-                      <span
-                        key={phase}
-                        className={`text-[10px] px-2 py-1 rounded font-medium transition-all ${
-                          isActive
-                            ? 'bg-sky-500 text-white'
-                            : isPast
-                            ? 'bg-emerald-500/20 text-emerald-400'
-                            : isNext
-                            ? 'bg-slate-600 text-slate-200 ring-1 ring-sky-500/50'
-                            : 'bg-slate-700/50 text-slate-500'
-                        }`}
+              {acarsTab === 'telemetry' ? (
+                <>
+                  {/* Telemetry Grid */}
+                  <div className="p-4 grid grid-cols-3 gap-3">
+                    <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                      <TrendingUp className="w-4 h-4 text-sky-400 mx-auto mb-1" />
+                      <p className="text-white font-mono font-bold text-sm">
+                        {(liveTelemetry && simStatus?.tracking)
+                          ? liveTelemetry.altitude_ft.toLocaleString()
+                          : selectedAcars.altitude_ft != null ? selectedAcars.altitude_ft.toLocaleString() : '---'}
+                      </p>
+                      <p className="text-[10px] text-slate-500">ALT ft</p>
+                    </div>
+                    <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                      <Gauge className="w-4 h-4 text-emerald-400 mx-auto mb-1" />
+                      <p className="text-white font-mono font-bold text-sm">
+                        {(liveTelemetry && simStatus?.tracking)
+                          ? liveTelemetry.ground_speed_kts
+                          : selectedAcars.ground_speed_kts ?? '---'}
+                      </p>
+                      <p className="text-[10px] text-slate-500">GS kts</p>
+                    </div>
+                    <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                      <Compass className="w-4 h-4 text-amber-400 mx-auto mb-1" />
+                      <p className="text-white font-mono font-bold text-sm">
+                        {(liveTelemetry && simStatus?.tracking)
+                          ? `${liveTelemetry.heading_deg}°`
+                          : selectedAcars.heading_deg != null ? `${selectedAcars.heading_deg}°` : '---'}
+                      </p>
+                      <p className="text-[10px] text-slate-500">HDG</p>
+                    </div>
+                    <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                      {((liveTelemetry && simStatus?.tracking) ? liveTelemetry.vs_fpm : (selectedAcars.vs_fpm ?? 0)) >= 0
+                        ? <TrendingUp className="w-4 h-4 text-green-400 mx-auto mb-1" />
+                        : <TrendingDown className="w-4 h-4 text-red-400 mx-auto mb-1" />}
+                      <p className="text-white font-mono font-bold text-sm">
+                        {(liveTelemetry && simStatus?.tracking)
+                          ? `${liveTelemetry.vs_fpm > 0 ? '+' : ''}${liveTelemetry.vs_fpm}`
+                          : selectedAcars.vs_fpm != null ? `${selectedAcars.vs_fpm > 0 ? '+' : ''}${selectedAcars.vs_fpm}` : '---'}
+                      </p>
+                      <p className="text-[10px] text-slate-500">VS fpm</p>
+                    </div>
+                    <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                      <Fuel className="w-4 h-4 text-orange-400 mx-auto mb-1" />
+                      <p className="text-white font-mono font-bold text-sm">
+                        {(liveTelemetry && simStatus?.tracking)
+                          ? Math.round(liveTelemetry.fuel_lbs).toLocaleString()
+                          : selectedAcars.fuel_lbs != null ? Math.round(Number(selectedAcars.fuel_lbs)).toLocaleString() : '---'}
+                      </p>
+                      <p className="text-[10px] text-slate-500">FUEL lbs</p>
+                    </div>
+                    <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                      <Clock className="w-4 h-4 text-violet-400 mx-auto mb-1" />
+                      <p className="text-white font-mono font-bold text-sm">
+                        {(liveTelemetry && simStatus?.tracking)
+                          ? `${liveTelemetry.sim_rate}x`
+                          : `${selectedAcars.sim_rate}x`}
+                      </p>
+                      <p className="text-[10px] text-slate-500">SIM RATE</p>
+                    </div>
+                  </div>
+
+                  {/* Phase Stepper Controls */}
+                  <div className="px-4 pb-4">
+                    <p className="text-xs text-slate-400 font-medium mb-2">Flight Phase Controls (Dev Sim)</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {FLIGHT_PHASES.map((phase, idx) => {
+                        const currentIdx = FLIGHT_PHASES.indexOf(selectedAcars.phase);
+                        const isActive = idx === currentIdx;
+                        const isPast = idx < currentIdx;
+                        const isNext = idx === currentIdx + 1;
+                        return (
+                          <span
+                            key={phase}
+                            className={`text-[10px] px-2 py-1 rounded font-medium transition-all ${
+                              isActive
+                                ? 'bg-sky-500 text-white'
+                                : isPast
+                                ? 'bg-emerald-500/20 text-emerald-400'
+                                : isNext
+                                ? 'bg-slate-600 text-slate-200 ring-1 ring-sky-500/50'
+                                : 'bg-slate-700/50 text-slate-500'
+                            }`}
+                          >
+                            {FLIGHT_PHASE_LABELS[phase]}
+                          </span>
+                        );
+                      })}
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={() => advancePhase(selectedAcars)}
+                        disabled={
+                          advancingPhase === selectedAcars.id ||
+                          FLIGHT_PHASES.indexOf(selectedAcars.phase) >= FLIGHT_PHASES.length - 1
+                        }
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-sky-500 hover:bg-sky-400 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold text-sm rounded-lg transition-all"
                       >
-                        {FLIGHT_PHASE_LABELS[phase]}
-                      </span>
-                    );
-                  })}
+                        {advancingPhase === selectedAcars.id ? (
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <>
+                            <ChevronRight className="w-4 h-4" />
+                            Advance Phase
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => stopTracking(selectedAcars)}
+                        className="px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold text-sm rounded-lg transition-all"
+                        title="Stop tracking and release booking"
+                      >
+                        <Square className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* OFP Tab */
+                <div className="p-4 space-y-4">
+                  {selectedBooking.aircraft_id && aircraftMap[selectedBooking.aircraft_id] ? (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-white font-semibold text-sm">Operational Flight Plan</p>
+                          <p className="text-slate-400 text-xs mt-0.5">
+                            SimBrief dispatch for CPZ{selectedBooking.flight_number}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setSimbriefOpen(true)}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold rounded-lg transition-all"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          Open SimBrief
+                        </button>
+                      </div>
+
+                      <div className="bg-slate-900/50 border border-slate-700/50 rounded-lg p-4 space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <p className="text-[10px] text-slate-500 uppercase font-medium">Callsign</p>
+                            <p className="text-white font-mono text-sm">CPZ{selectedBooking.flight_number}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-slate-500 uppercase font-medium">Aircraft</p>
+                            <p className="text-white font-mono text-sm">
+                              {getSimBriefType(aircraftMap[selectedBooking.aircraft_id].aircraft_type)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-slate-500 uppercase font-medium">Route</p>
+                            <p className="text-white font-mono text-sm">
+                              {selectedBooking.departure_icao} -&gt; {selectedBooking.arrival_icao}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-slate-500 uppercase font-medium">PAX</p>
+                            <p className="text-white font-mono text-sm">{selectedBooking.pax_count}</p>
+                          </div>
+                        </div>
+
+                        <div className="pt-3 border-t border-slate-700/50">
+                          <p className="text-xs text-slate-400 mb-2">Quick Access OFP (opens in frame)</p>
+                          <div className="h-[280px] bg-slate-950 rounded-lg overflow-hidden border border-slate-700/50">
+                            <iframe
+                              src={buildSimBriefUrl({
+                                airline: 'CPZ',
+                                flightNumber: selectedBooking.flight_number,
+                                origin: selectedBooking.departure_icao,
+                                destination: selectedBooking.arrival_icao,
+                                aircraftIcao: getSimBriefType(aircraftMap[selectedBooking.aircraft_id].aircraft_type),
+                                pax: selectedBooking.pax_count,
+                              })}
+                              className="w-full h-full border-0"
+                              sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+                              title="SimBrief OFP"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center py-8">
+                      <FileText className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                      <p className="text-slate-400 text-sm">No aircraft assigned to this flight</p>
+                      <p className="text-slate-500 text-xs mt-1">OFP generation requires an assigned aircraft</p>
+                    </div>
+                  )}
                 </div>
-                <div className="mt-3 flex gap-2">
-                  <button
-                    onClick={() => advancePhase(selectedAcars)}
-                    disabled={
-                      advancingPhase === selectedAcars.id ||
-                      FLIGHT_PHASES.indexOf(selectedAcars.phase) >= FLIGHT_PHASES.length - 1
-                    }
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-sky-500 hover:bg-sky-400 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold text-sm rounded-lg transition-all"
-                  >
-                    {advancingPhase === selectedAcars.id ? (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <>
-                        <ChevronRight className="w-4 h-4" />
-                        Advance Phase
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => stopTracking(selectedAcars)}
-                    className="px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold text-sm rounded-lg transition-all"
-                    title="Stop tracking and release booking"
-                  >
-                    <Square className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
+              )}
             </div>
           ) : (
             <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-8 text-center">
@@ -981,6 +1089,19 @@ function Acars({ currentUserId }: AcarsProps) {
           )}
         </div>
       </div>
+
+      {/* SimBrief Modal */}
+      {simbriefOpen && selectedBooking && selectedBooking.aircraft_id && aircraftMap[selectedBooking.aircraft_id] && (
+        <SimBriefModal
+          callsign="CPZ"
+          flightNumber={selectedBooking.flight_number}
+          origin={selectedBooking.departure_icao}
+          destination={selectedBooking.arrival_icao}
+          aircraftIcao={getSimBriefType(aircraftMap[selectedBooking.aircraft_id].aircraft_type)}
+          pax={selectedBooking.pax_count}
+          onClose={() => setSimbriefOpen(false)}
+        />
+      )}
     </div>
   );
 }

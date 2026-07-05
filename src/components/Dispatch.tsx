@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Airport, Route, PaxPool, FlightBooking, Aircraft, Gate, SizeCategory } from '../lib/types';
-import { Plane, Clock, Users, MapPin, ArrowRight, CheckCircle, XCircle, AlertCircle, Radio, DoorOpen, DollarSign, Timer, RefreshCw } from 'lucide-react';
+import { Plane, Clock, Users, MapPin, ArrowRight, CheckCircle, XCircle, AlertCircle, Radio, DoorOpen, DollarSign, Timer, RefreshCw, FileText } from 'lucide-react';
 import SearchableSelect from './SearchableSelect';
+import SimBriefModal, { getSimBriefType } from './SimBriefModal';
 
 interface DispatchProps {
   airports: Airport[];
@@ -53,6 +54,9 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const pollRef = useRef<number | null>(null);
+
+  // SimBrief modal state
+  const [simbriefBookingId, setSimbriefBookingId] = useState<string | null>(null);
 
   const airportCodes = useMemo(() => airports.map(a => a.icao_code).sort(), [airports]);
 
@@ -1050,6 +1054,15 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
                           ADMIN ACTION
                         </span>
                       )}
+                      {aircraftForBooking && (
+                        <button
+                          onClick={() => setSimbriefBookingId(booking.id)}
+                          className="flex items-center gap-1.5 px-4 py-2 bg-sky-600/80 hover:bg-sky-500 text-white text-sm font-semibold rounded-lg transition-all shadow-lg shadow-sky-600/20"
+                        >
+                          <FileText className="w-4 h-4" />
+                          SimBrief OFP
+                        </button>
+                      )}
                       {!assignedGate && (
                         <button
                           onClick={() => requestGate(booking.id)}
@@ -1106,6 +1119,24 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
           </div>
         )}
       </div>
+
+      {/* SimBrief Modal */}
+      {simbriefBookingId && (() => {
+        const booking = bookings.find(b => b.id === simbriefBookingId);
+        const ac = booking ? bookingAircraftMap[simbriefBookingId] : null;
+        if (!booking || !ac) return null;
+        return (
+          <SimBriefModal
+            callsign="CPZ"
+            flightNumber={booking.flight_number}
+            origin={booking.departure_icao}
+            destination={booking.arrival_icao}
+            aircraftIcao={getSimBriefType(ac.aircraft_type)}
+            pax={booking.pax_count}
+            onClose={() => setSimbriefBookingId(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
