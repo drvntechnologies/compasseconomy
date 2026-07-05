@@ -975,7 +975,7 @@ function Acars({ currentUserId, simbriefId }: AcarsProps) {
 
                       {/* Flight Summary */}
                       <div className="bg-slate-900/50 border border-slate-700/50 rounded-lg p-4">
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
                           <div>
                             <p className="text-[10px] text-slate-500 uppercase font-medium">Origin</p>
                             <p className="text-white font-mono text-sm font-bold">{ofpData.origin?.icao_code || '----'}</p>
@@ -991,6 +991,10 @@ function Acars({ currentUserId, simbriefId }: AcarsProps) {
                           <div>
                             <p className="text-[10px] text-slate-500 uppercase font-medium">Cruise FL</p>
                             <p className="text-white font-mono text-sm">FL{ofpData.general?.initial_altitude ? Math.round(Number(ofpData.general.initial_altitude) / 100) : '---'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-slate-500 uppercase font-medium">Cost Index</p>
+                            <p className="text-white font-mono text-sm">{ofpData.general?.costindex ?? '---'}</p>
                           </div>
                         </div>
 
