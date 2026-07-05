@@ -6,7 +6,7 @@ import type { Airport, Route, FlightBooking, Aircraft, PaxPool, AcarsFlight, Fli
 import { FLIGHT_PHASES, FLIGHT_PHASE_LABELS } from '../lib/types';
 import { getChecklistForAircraft } from '../lib/checklists';
 import type { ChecklistSection } from '../lib/checklists';
-import SimBriefModal, { getSimBriefType, buildSimBriefUrl } from './SimBriefModal';
+import SimBriefModal, { getSimBriefType } from './SimBriefModal';
 import {
   Radar, AlertTriangle, Plane, Play, Square, ChevronRight, Users, MapPin,
   ArrowRight, Clock, Gauge, Compass, TrendingUp, TrendingDown, Fuel, RefreshCw,
@@ -18,6 +18,7 @@ interface AcarsProps {
   routes: Route[];
   currentUserId: string | null;
   isAdmin: boolean;
+  simbriefId?: string | null;
 }
 
 const SIZE_HIERARCHY: SizeCategory[] = ['ramp', 'small', 'medium', 'heavy'];
@@ -35,7 +36,7 @@ const PHASE_COLORS: Record<FlightPhase, string> = {
   parked: 'bg-slate-500/20 text-slate-300',
 };
 
-function Acars({ currentUserId }: AcarsProps) {
+function Acars({ currentUserId, simbriefId }: AcarsProps) {
   const [acarsFlights, setAcarsFlights] = useState<AcarsFlight[]>([]);
   const [bookings, setBookings] = useState<FlightBooking[]>([]);
   const [aircraft, setAircraft] = useState<Aircraft[]>([]);
@@ -58,6 +59,9 @@ function Acars({ currentUserId }: AcarsProps) {
   // OFP tab state
   const [acarsTab, setAcarsTab] = useState<'telemetry' | 'ofp'>('telemetry');
   const [simbriefOpen, setSimbriefOpen] = useState(false);
+  const [ofpData, setOfpData] = useState<any>(null);
+  const [ofpLoading, setOfpLoading] = useState(false);
+  const [ofpError, setOfpError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -91,6 +95,39 @@ function Acars({ currentUserId }: AcarsProps) {
       if (statusInterval) clearInterval(statusInterval);
     };
   }, [isTauriApp]);
+
+  // Fetch OFP from SimBrief when OFP tab is opened
+  useEffect(() => {
+    if (acarsTab !== 'ofp' || !simbriefId || !selectedFlightId) return;
+    fetchOfp();
+  }, [acarsTab, simbriefId, selectedFlightId]);
+
+  async function fetchOfp() {
+    if (!simbriefId) {
+      setOfpError('No SimBrief Pilot ID configured. Go to Settings to add yours.');
+      return;
+    }
+    setOfpLoading(true);
+    setOfpError(null);
+    try {
+      const resp = await fetch(
+        `https://www.simbrief.com/api/xml.fetcher.php?userid=${encodeURIComponent(simbriefId)}&json=1`
+      );
+      if (!resp.ok) {
+        throw new Error(`SimBrief API returned ${resp.status}`);
+      }
+      const data = await resp.json();
+      if (data.fetch?.status === 'Error') {
+        throw new Error(data.fetch.result || 'Failed to fetch OFP');
+      }
+      setOfpData(data);
+    } catch (e: any) {
+      setOfpError(e.message || 'Failed to fetch OFP from SimBrief');
+      setOfpData(null);
+    } finally {
+      setOfpLoading(false);
+    }
+  }
 
   async function fetchData() {
     const [acarsRes, bookingsRes, acRes, paxRes, profilesRes] = await Promise.all([
@@ -881,73 +918,183 @@ function Acars({ currentUserId }: AcarsProps) {
               ) : (
                 /* OFP Tab */
                 <div className="p-4 space-y-4">
-                  {selectedBooking.aircraft_id && aircraftMap[selectedBooking.aircraft_id] ? (
+                  {!simbriefId ? (
+                    <div className="text-center py-8">
+                      <FileText className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                      <p className="text-slate-400 text-sm font-medium">SimBrief Pilot ID Not Set</p>
+                      <p className="text-slate-500 text-xs mt-1 max-w-xs mx-auto">
+                        Open Pilot Settings (gear icon in the sidebar) and enter your SimBrief Pilot ID to view your generated OFPs here.
+                      </p>
+                    </div>
+                  ) : ofpLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="animate-spin w-6 h-6 border-2 border-sky-500 border-t-transparent rounded-full" />
+                      <span className="ml-3 text-slate-400 text-sm">Fetching OFP from SimBrief...</span>
+                    </div>
+                  ) : ofpError ? (
+                    <div className="text-center py-8">
+                      <FileText className="w-8 h-8 text-red-500/50 mx-auto mb-2" />
+                      <p className="text-red-400 text-sm">{ofpError}</p>
+                      <button
+                        onClick={fetchOfp}
+                        className="mt-3 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded-lg transition-colors"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  ) : ofpData ? (
                     <>
+                      {/* OFP Header */}
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-white font-semibold text-sm">Operational Flight Plan</p>
+                          <p className="text-white font-semibold text-sm">
+                            {ofpData.general?.icao_airline || 'CPZ'}{ofpData.general?.flight_number || ''} OFP
+                          </p>
                           <p className="text-slate-400 text-xs mt-0.5">
-                            SimBrief dispatch for CPZ{selectedBooking.flight_number}
+                            Generated {ofpData.params?.time_generated
+                              ? new Date(Number(ofpData.params.time_generated) * 1000).toLocaleString()
+                              : 'recently'}
                           </p>
                         </div>
-                        <button
-                          onClick={() => setSimbriefOpen(true)}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold rounded-lg transition-all"
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                          Open SimBrief
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={fetchOfp}
+                            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded-lg transition-colors"
+                          >
+                            Refresh
+                          </button>
+                          <button
+                            onClick={() => setSimbriefOpen(true)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold rounded-lg transition-all"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            New Plan
+                          </button>
+                        </div>
                       </div>
 
-                      <div className="bg-slate-900/50 border border-slate-700/50 rounded-lg p-4 space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
+                      {/* Flight Summary */}
+                      <div className="bg-slate-900/50 border border-slate-700/50 rounded-lg p-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                           <div>
-                            <p className="text-[10px] text-slate-500 uppercase font-medium">Callsign</p>
-                            <p className="text-white font-mono text-sm">CPZ{selectedBooking.flight_number}</p>
+                            <p className="text-[10px] text-slate-500 uppercase font-medium">Origin</p>
+                            <p className="text-white font-mono text-sm font-bold">{ofpData.origin?.icao_code || '----'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-slate-500 uppercase font-medium">Destination</p>
+                            <p className="text-white font-mono text-sm font-bold">{ofpData.destination?.icao_code || '----'}</p>
                           </div>
                           <div>
                             <p className="text-[10px] text-slate-500 uppercase font-medium">Aircraft</p>
-                            <p className="text-white font-mono text-sm">
-                              {getSimBriefType(aircraftMap[selectedBooking.aircraft_id].aircraft_type)}
-                            </p>
+                            <p className="text-white font-mono text-sm">{ofpData.aircraft?.icaocode || '----'}</p>
                           </div>
                           <div>
-                            <p className="text-[10px] text-slate-500 uppercase font-medium">Route</p>
-                            <p className="text-white font-mono text-sm">
-                              {selectedBooking.departure_icao} -&gt; {selectedBooking.arrival_icao}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] text-slate-500 uppercase font-medium">PAX</p>
-                            <p className="text-white font-mono text-sm">{selectedBooking.pax_count}</p>
+                            <p className="text-[10px] text-slate-500 uppercase font-medium">Cruise FL</p>
+                            <p className="text-white font-mono text-sm">FL{ofpData.general?.initial_altitude ? Math.round(Number(ofpData.general.initial_altitude) / 100) : '---'}</p>
                           </div>
                         </div>
 
-                        <div className="pt-3 border-t border-slate-700/50">
-                          <p className="text-xs text-slate-400 mb-2">Quick Access OFP (opens in frame)</p>
-                          <div className="h-[280px] bg-slate-950 rounded-lg overflow-hidden border border-slate-700/50">
-                            <iframe
-                              src={buildSimBriefUrl({
-                                airline: 'CPZ',
-                                flightNumber: selectedBooking.flight_number,
-                                origin: selectedBooking.departure_icao,
-                                destination: selectedBooking.arrival_icao,
-                                aircraftIcao: getSimBriefType(aircraftMap[selectedBooking.aircraft_id].aircraft_type),
-                                pax: selectedBooking.pax_count,
-                              })}
-                              className="w-full h-full border-0"
-                              sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
-                              title="SimBrief OFP"
-                            />
+                        {/* Route */}
+                        {ofpData.general?.route && (
+                          <div className="mb-3">
+                            <p className="text-[10px] text-slate-500 uppercase font-medium mb-1">Route</p>
+                            <p className="text-white font-mono text-[11px] leading-relaxed bg-slate-800 rounded p-2 break-all max-h-20 overflow-y-auto">
+                              {ofpData.general.route}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Key Performance Data */}
+                        <div className="grid grid-cols-3 gap-3 pt-3 border-t border-slate-700/50">
+                          <div>
+                            <p className="text-[10px] text-slate-500 uppercase font-medium">Distance</p>
+                            <p className="text-white font-mono text-xs">
+                              {ofpData.general?.route_distance || '--'} nm
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-slate-500 uppercase font-medium">Est. Time</p>
+                            <p className="text-white font-mono text-xs">
+                              {ofpData.times?.est_time_enroute
+                                ? `${Math.floor(Number(ofpData.times.est_time_enroute) / 3600)}h${Math.floor((Number(ofpData.times.est_time_enroute) % 3600) / 60).toString().padStart(2, '0')}m`
+                                : '--'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-slate-500 uppercase font-medium">Avg Wind</p>
+                            <p className="text-white font-mono text-xs">
+                              {ofpData.general?.avg_wind_dir || '---'}/{ofpData.general?.avg_wind_spd || '--'}kt
+                            </p>
                           </div>
                         </div>
                       </div>
+
+                      {/* Fuel Summary */}
+                      <div className="bg-slate-900/50 border border-slate-700/50 rounded-lg p-4">
+                        <p className="text-xs text-slate-400 font-medium mb-3">Fuel Plan</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { label: 'Block Fuel', value: ofpData.fuel?.plan_ramp },
+                            { label: 'Trip Fuel', value: ofpData.fuel?.enroute_burn },
+                            { label: 'Reserves', value: ofpData.fuel?.reserve },
+                            { label: 'Alternate', value: ofpData.fuel?.alternate_burn },
+                            { label: 'Contingency', value: ofpData.fuel?.contingency },
+                            { label: 'Min Takeoff', value: ofpData.fuel?.min_takeoff },
+                          ].map(item => (
+                            <div key={item.label} className="flex items-center justify-between py-1">
+                              <span className="text-[11px] text-slate-400">{item.label}</span>
+                              <span className="text-[11px] text-white font-mono">
+                                {item.value ? `${Number(item.value).toLocaleString()} lbs` : '--'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Weights */}
+                      <div className="bg-slate-900/50 border border-slate-700/50 rounded-lg p-4">
+                        <p className="text-xs text-slate-400 font-medium mb-3">Weights</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { label: 'ZFW', value: ofpData.weights?.est_zfw },
+                            { label: 'TOW', value: ofpData.weights?.est_tow },
+                            { label: 'LDW', value: ofpData.weights?.est_ldw },
+                            { label: 'Payload', value: ofpData.weights?.payload },
+                            { label: 'Passengers', value: ofpData.weights?.pax_count, unit: '' },
+                            { label: 'Cargo', value: ofpData.weights?.cargo },
+                          ].map(item => (
+                            <div key={item.label} className="flex items-center justify-between py-1">
+                              <span className="text-[11px] text-slate-400">{item.label}</span>
+                              <span className="text-[11px] text-white font-mono">
+                                {item.value
+                                  ? item.unit === '' ? item.value : `${Number(item.value).toLocaleString()} lbs`
+                                  : '--'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Alternate */}
+                      {ofpData.alternate && (
+                        <div className="bg-slate-900/50 border border-slate-700/50 rounded-lg p-3">
+                          <p className="text-[10px] text-slate-500 uppercase font-medium">Alternate</p>
+                          <p className="text-white font-mono text-sm">
+                            {ofpData.alternate.icao_code || '--'} ({ofpData.alternate.name || ''})
+                          </p>
+                        </div>
+                      )}
                     </>
                   ) : (
                     <div className="text-center py-8">
                       <FileText className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-                      <p className="text-slate-400 text-sm">No aircraft assigned to this flight</p>
-                      <p className="text-slate-500 text-xs mt-1">OFP generation requires an assigned aircraft</p>
+                      <p className="text-slate-400 text-sm">No OFP loaded</p>
+                      <button
+                        onClick={fetchOfp}
+                        className="mt-3 px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-xs rounded-lg transition-colors"
+                      >
+                        Fetch Latest OFP
+                      </button>
                     </div>
                   )}
                 </div>
