@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import type { Airport, Route, PaxPool, FlightLog, Notam } from '../lib/types';
 import { Users, Plane, MapPin, ArrowRight, Clock, CheckCircle, ExternalLink, RefreshCw, TrendingUp, Trophy, DollarSign, AlertTriangle, Info, AlertCircle, Plus, X, Send } from 'lucide-react';
 import AirportDetailModal from './AirportDetailModal';
+import LiveMap from './LiveMap';
 
 interface DashboardProps {
   airports: Airport[];
@@ -413,6 +414,9 @@ export default function Dashboard({ airports, routes, userRole }: DashboardProps
           </div>
         </div>
       </div>
+
+      {/* Live Map Widget */}
+      <LiveMap compact onExpandClick={() => {}} />
 
       {/* NOTAMs + Pilot Leaderboard */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

@@ -7,4 +7,10 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
+  server: {
+    port: 5173,
+    strictPort: true,
+    host: process.env.TAURI_DEV_HOST || false,
+  },
+  envPrefix: ['VITE_', 'TAURI_ENV_*'],
 });

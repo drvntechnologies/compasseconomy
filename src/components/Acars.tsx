@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
+import { getIsTauri, invokeCommand, listenEvent } from '../lib/tauri-bridge';
+import type { SimTelemetry, SimConnectStatus } from '../lib/tauri-bridge';
 import type { Airport, Route, FlightBooking, Aircraft, PaxPool, AcarsFlight, FlightPhase, Gate, SizeCategory } from '../lib/types';
 import { FLIGHT_PHASES, FLIGHT_PHASE_LABELS } from '../lib/types';
 import { getChecklistForAircraft } from '../lib/checklists';
@@ -7,7 +9,7 @@ import type { ChecklistSection } from '../lib/checklists';
 import {
   Radar, AlertTriangle, Plane, Play, Square, ChevronRight, Users, MapPin,
   ArrowRight, Clock, Gauge, Compass, TrendingUp, TrendingDown, Fuel, RefreshCw,
-  Radio, ClipboardList, Check, ChevronLeft, RotateCcw, DoorOpen
+  Radio, ClipboardList, Check, ChevronLeft, RotateCcw, DoorOpen, Wifi, WifiOff
 } from 'lucide-react';
 
 interface AcarsProps {
@@ -47,11 +49,43 @@ function Acars({ currentUserId }: AcarsProps) {
   const [assignedGate, setAssignedGate] = useState<Gate | null>(null);
   const [gateAssigning, setGateAssigning] = useState(false);
 
+  // SimConnect state
+  const [isTauriApp] = useState(() => getIsTauri());
+  const [simStatus, setSimStatus] = useState<SimConnectStatus | null>(null);
+  const [liveTelemetry, setLiveTelemetry] = useState<SimTelemetry | null>(null);
+
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 15000);
     return () => clearInterval(interval);
   }, []);
+
+  // SimConnect telemetry listener (Tauri only)
+  useEffect(() => {
+    if (!isTauriApp) return;
+    let unlistenTelemetry: (() => void) | null = null;
+    let statusInterval: number | null = null;
+
+    (async () => {
+      unlistenTelemetry = await listenEvent<SimTelemetry>('simconnect-telemetry', (payload) => {
+        setLiveTelemetry(payload);
+      });
+
+      const pollStatus = async () => {
+        const raw = await invokeCommand<string>('get_simconnect_status');
+        if (raw) {
+          try { setSimStatus(JSON.parse(raw)); } catch {}
+        }
+      };
+      pollStatus();
+      statusInterval = window.setInterval(pollStatus, 5000);
+    })();
+
+    return () => {
+      unlistenTelemetry?.();
+      if (statusInterval) clearInterval(statusInterval);
+    };
+  }, [isTauriApp]);
 
   async function fetchData() {
     const [acarsRes, bookingsRes, acRes, paxRes, profilesRes] = await Promise.all([
@@ -308,16 +342,47 @@ function Acars({ currentUserId }: AcarsProps) {
 
   return (
     <div className="space-y-4">
-      {/* Development Banner */}
-      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center gap-3">
-        <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
-        <div>
-          <p className="text-amber-200 font-semibold text-sm">ACARS System -- Actively in Development</p>
-          <p className="text-amber-300/70 text-xs mt-0.5">
-            SimConnect integration is under construction. Manual phase simulation is available for testing flight tracking workflows.
-          </p>
+      {/* Status Banner */}
+      {isTauriApp && simStatus ? (
+        <div className={`${simStatus.connected ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-amber-500/10 border-amber-500/30'} border rounded-xl p-4 flex items-center gap-3`}>
+          {simStatus.connected ? (
+            <Wifi className="w-5 h-5 text-emerald-400 shrink-0" />
+          ) : (
+            <WifiOff className="w-5 h-5 text-amber-400 shrink-0" />
+          )}
+          <div className="flex-1">
+            <p className={`${simStatus.connected ? 'text-emerald-200' : 'text-amber-200'} font-semibold text-sm`}>
+              {simStatus.connected ? 'Connected to MSFS via SimConnect' : 'SimConnect Disconnected'}
+            </p>
+            <p className={`${simStatus.connected ? 'text-emerald-300/70' : 'text-amber-300/70'} text-xs mt-0.5`}>
+              {simStatus.connected
+                ? simStatus.tracking
+                  ? `Tracking active -- Phase: ${FLIGHT_PHASE_LABELS[simStatus.phase as FlightPhase] || simStatus.phase} -- Reports every 120s`
+                  : 'Connected but not tracking. Start a flight to begin ACARS reporting.'
+                : simStatus.error || 'Click "Connect" to establish SimConnect link with MSFS.'
+              }
+            </p>
+          </div>
+          {simStatus.connected && simStatus.last_report_at && (
+            <span className="text-[10px] text-emerald-400/60 font-mono shrink-0">
+              Last: {new Date(simStatus.last_report_at).toLocaleTimeString()}
+            </span>
+          )}
         </div>
-      </div>
+      ) : (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+          <div>
+            <p className="text-amber-200 font-semibold text-sm">ACARS System -- {isTauriApp ? 'Desktop Mode' : 'Web Mode'}</p>
+            <p className="text-amber-300/70 text-xs mt-0.5">
+              {isTauriApp
+                ? 'Running in desktop app. Connect to MSFS for live flight data, or use manual phase simulation below.'
+                : 'SimConnect integration requires the desktop app. Manual phase simulation is available for testing.'
+              }
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Stats bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -670,43 +735,57 @@ function Acars({ currentUserId }: AcarsProps) {
                 <div className="bg-slate-900/50 rounded-lg p-3 text-center">
                   <TrendingUp className="w-4 h-4 text-sky-400 mx-auto mb-1" />
                   <p className="text-white font-mono font-bold text-sm">
-                    {selectedAcars.altitude_ft != null ? selectedAcars.altitude_ft.toLocaleString() : '---'}
+                    {(liveTelemetry && simStatus?.tracking)
+                      ? liveTelemetry.altitude_ft.toLocaleString()
+                      : selectedAcars.altitude_ft != null ? selectedAcars.altitude_ft.toLocaleString() : '---'}
                   </p>
                   <p className="text-[10px] text-slate-500">ALT ft</p>
                 </div>
                 <div className="bg-slate-900/50 rounded-lg p-3 text-center">
                   <Gauge className="w-4 h-4 text-emerald-400 mx-auto mb-1" />
                   <p className="text-white font-mono font-bold text-sm">
-                    {selectedAcars.ground_speed_kts ?? '---'}
+                    {(liveTelemetry && simStatus?.tracking)
+                      ? liveTelemetry.ground_speed_kts
+                      : selectedAcars.ground_speed_kts ?? '---'}
                   </p>
                   <p className="text-[10px] text-slate-500">GS kts</p>
                 </div>
                 <div className="bg-slate-900/50 rounded-lg p-3 text-center">
                   <Compass className="w-4 h-4 text-amber-400 mx-auto mb-1" />
                   <p className="text-white font-mono font-bold text-sm">
-                    {selectedAcars.heading_deg != null ? `${selectedAcars.heading_deg}°` : '---'}
+                    {(liveTelemetry && simStatus?.tracking)
+                      ? `${liveTelemetry.heading_deg}°`
+                      : selectedAcars.heading_deg != null ? `${selectedAcars.heading_deg}°` : '---'}
                   </p>
                   <p className="text-[10px] text-slate-500">HDG</p>
                 </div>
                 <div className="bg-slate-900/50 rounded-lg p-3 text-center">
-                  {(selectedAcars.vs_fpm ?? 0) >= 0
+                  {((liveTelemetry && simStatus?.tracking) ? liveTelemetry.vs_fpm : (selectedAcars.vs_fpm ?? 0)) >= 0
                     ? <TrendingUp className="w-4 h-4 text-green-400 mx-auto mb-1" />
                     : <TrendingDown className="w-4 h-4 text-red-400 mx-auto mb-1" />}
                   <p className="text-white font-mono font-bold text-sm">
-                    {selectedAcars.vs_fpm != null ? `${selectedAcars.vs_fpm > 0 ? '+' : ''}${selectedAcars.vs_fpm}` : '---'}
+                    {(liveTelemetry && simStatus?.tracking)
+                      ? `${liveTelemetry.vs_fpm > 0 ? '+' : ''}${liveTelemetry.vs_fpm}`
+                      : selectedAcars.vs_fpm != null ? `${selectedAcars.vs_fpm > 0 ? '+' : ''}${selectedAcars.vs_fpm}` : '---'}
                   </p>
                   <p className="text-[10px] text-slate-500">VS fpm</p>
                 </div>
                 <div className="bg-slate-900/50 rounded-lg p-3 text-center">
                   <Fuel className="w-4 h-4 text-orange-400 mx-auto mb-1" />
                   <p className="text-white font-mono font-bold text-sm">
-                    {selectedAcars.fuel_lbs != null ? Math.round(Number(selectedAcars.fuel_lbs)).toLocaleString() : '---'}
+                    {(liveTelemetry && simStatus?.tracking)
+                      ? Math.round(liveTelemetry.fuel_lbs).toLocaleString()
+                      : selectedAcars.fuel_lbs != null ? Math.round(Number(selectedAcars.fuel_lbs)).toLocaleString() : '---'}
                   </p>
                   <p className="text-[10px] text-slate-500">FUEL lbs</p>
                 </div>
                 <div className="bg-slate-900/50 rounded-lg p-3 text-center">
                   <Clock className="w-4 h-4 text-violet-400 mx-auto mb-1" />
-                  <p className="text-white font-mono font-bold text-sm">{selectedAcars.sim_rate}x</p>
+                  <p className="text-white font-mono font-bold text-sm">
+                    {(liveTelemetry && simStatus?.tracking)
+                      ? `${liveTelemetry.sim_rate}x`
+                      : `${selectedAcars.sim_rate}x`}
+                  </p>
                   <p className="text-[10px] text-slate-500">SIM RATE</p>
                 </div>
               </div>

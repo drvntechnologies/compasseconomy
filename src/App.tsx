@@ -11,7 +11,9 @@ import Fleet from './components/Fleet';
 import Gates from './components/Gates';
 import Finances from './components/Finances';
 import Acars from './components/Acars';
-import { Plane, LogOut, LayoutDashboard, Settings, Users, Navigation, Clock, Gauge, Radio, Radar, PanelLeftClose, PanelLeft, DoorOpen, DollarSign, KeyRound, Sun, Moon, Monitor, Laptop, Menu, X, ChevronDown } from 'lucide-react';
+import LiveMap from './components/LiveMap';
+import SimConnectIndicator from './components/SimConnectIndicator';
+import { Plane, LogOut, LayoutDashboard, Settings, Users, Navigation, Clock, Gauge, Radio, Radar, PanelLeftClose, PanelLeft, DoorOpen, DollarSign, KeyRound, Sun, Moon, Monitor, Laptop, Menu, X, ChevronDown, Map } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 
 export default function App() {
@@ -19,7 +21,7 @@ export default function App() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [airports, setAirports] = useState<Airport[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
-  const [activeView, setActiveView] = useState<'dashboard' | 'dispatch' | 'planner' | 'capacity' | 'fleet' | 'gates' | 'finances' | 'acars' | 'admin'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'dispatch' | 'planner' | 'capacity' | 'fleet' | 'gates' | 'finances' | 'acars' | 'livemap' | 'admin'>('dashboard');
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(new Date());
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -164,6 +166,7 @@ export default function App() {
   const topNavItems = [
     { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'dispatch' as const, label: 'Dispatch/Logging', icon: Radio },
+    { id: 'livemap' as const, label: 'Live Map', icon: Map },
   ];
 
   const flightOpsItems = [
@@ -198,7 +201,10 @@ export default function App() {
           <Plane className="w-4 h-4 text-sky-400" />
           <span className="text-white font-semibold text-sm">Compass Atlantic</span>
         </div>
-        <span className="ml-auto text-xs text-cyan-400 font-mono">{utcTime.slice(0, 5)}Z</span>
+        <div className="ml-auto flex items-center gap-2">
+          <SimConnectIndicator />
+          <span className="text-xs text-cyan-400 font-mono">{utcTime.slice(0, 5)}Z</span>
+        </div>
       </div>
 
       {/* Mobile overlay backdrop */}
@@ -364,6 +370,11 @@ export default function App() {
 
         {/* Clock section */}
         <div className={`px-3 py-3 border-t border-slate-700 ${sidebarCollapsed ? 'text-center' : ''}`}>
+          {!sidebarCollapsed && (
+            <div className="mb-2">
+              <SimConnectIndicator />
+            </div>
+          )}
           {sidebarCollapsed ? (
             <div className="flex flex-col items-center gap-0.5">
               <Clock className="w-3.5 h-3.5 text-slate-500" />
@@ -506,6 +517,10 @@ export default function App() {
 
           {activeView === 'acars' && isAdmin && (
             <Acars airports={airports} routes={routes} currentUserId={session?.user?.id || null} isAdmin={isAdmin} />
+          )}
+
+          {activeView === 'livemap' && (
+            <LiveMap />
           )}
 
           {activeView === 'admin' && isAdmin && (

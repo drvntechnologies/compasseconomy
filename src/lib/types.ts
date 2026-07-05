@@ -12,6 +12,8 @@ export interface Airport {
   is_hub: boolean;
   min_daily_pax: number;
   max_daily_pax: number;
+  latitude: number | null;
+  longitude: number | null;
   created_at: string;
 }
 

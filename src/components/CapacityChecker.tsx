@@ -129,7 +129,6 @@ export default function CapacityChecker({ airports, routes }: CapacityCheckerPro
 
   const totalEligible = results?.reduce((s, r) => s + r.pool.pax_count, 0) ?? 0;
   const terminatingPax = results?.filter(r => r.type === 'terminating').reduce((s, r) => s + r.pool.pax_count, 0) ?? 0;
-  const connectingPax = results?.filter(r => r.type !== 'terminating').reduce((s, r) => s + r.pool.pax_count, 0) ?? 0;
   const oneHopPax = results?.filter(r => r.type === '1-hop').reduce((s, r) => s + r.pool.pax_count, 0) ?? 0;
   const twoHopPax = results?.filter(r => r.type === '2-hop').reduce((s, r) => s + r.pool.pax_count, 0) ?? 0;
   const boarding = Math.min(totalEligible, seats);
