@@ -50,6 +50,7 @@ export default function Dashboard({ airports, routes, userRole }: DashboardProps
   const [notamPriority, setNotamPriority] = useState<'info' | 'warning' | 'urgent'>('info');
   const [notamExpiry, setNotamExpiry] = useState('');
   const [postingNotam, setPostingNotam] = useState(false);
+  const [notamError, setNotamError] = useState('');
 
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -175,13 +176,16 @@ export default function Dashboard({ airports, routes, userRole }: DashboardProps
   async function postNotam() {
     if (!notamTitle.trim() || !notamBody.trim()) return;
     setPostingNotam(true);
-    const { error } = await supabase.from('notams').insert({
+    setNotamError('');
+    const { error } = await supabase.from('notams').insert([{
       title: notamTitle.trim(),
       body: notamBody.trim(),
       priority: notamPriority,
       expires_at: notamExpiry ? new Date(notamExpiry).toISOString() : null,
-    });
-    if (!error) {
+    }]);
+    if (error) {
+      setNotamError(error.message);
+    } else {
       setNotamTitle('');
       setNotamBody('');
       setNotamPriority('info');
@@ -476,6 +480,11 @@ export default function Dashboard({ airports, routes, userRole }: DashboardProps
                   Post
                 </button>
               </div>
+              {notamError && (
+                <div className="p-2.5 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-xs">
+                  {notamError}
+                </div>
+              )}
             </div>
           )}
 

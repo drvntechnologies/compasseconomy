@@ -40,7 +40,7 @@ export default function App() {
     return localStorage.getItem('win7') === 'true';
   });
   const intervalRef = useRef<number | null>(null);
-  const [flightOpsOpen, setFlightOpsOpen] = useState(true);
+  const [flightOpsOpen, setFlightOpsOpen] = useState(false);
   const [paxOpsOpen, setPaxOpsOpen] = useState(false);
 
   useEffect(() => {
