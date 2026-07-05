@@ -217,6 +217,19 @@ export const FLIGHT_PHASE_LABELS: Record<FlightPhase, string> = {
   parked: 'Parked',
 };
 
+export type NotamPriority = 'info' | 'warning' | 'urgent';
+
+export interface Notam {
+  id: string;
+  title: string;
+  body: string;
+  priority: NotamPriority;
+  created_by: string;
+  expires_at: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface AcarsFlight {
   id: string;
   booking_id: string;

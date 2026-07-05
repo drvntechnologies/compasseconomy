@@ -360,7 +360,7 @@ export default function App() {
       }`}>
         <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 sm:py-8">
           {activeView === 'dashboard' && (
-            <Dashboard airports={airports} routes={routes} />
+            <Dashboard airports={airports} routes={routes} userRole={isAdmin ? 'admin' : 'user'} />
           )}
 
           {activeView === 'dispatch' && (
