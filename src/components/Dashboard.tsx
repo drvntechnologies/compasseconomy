@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Airport, Route, PaxPool, FlightLog } from '../lib/types';
-import { Users, Plane, MapPin, ArrowRight, Clock, CheckCircle, ExternalLink, RefreshCw, TrendingUp, Trophy, DollarSign, Calendar, BarChart3 } from 'lucide-react';
+import { Users, Plane, MapPin, ArrowRight, Clock, CheckCircle, ExternalLink, RefreshCw, TrendingUp, Trophy, DollarSign } from 'lucide-react';
 import AirportDetailModal from './AirportDetailModal';
 
 interface DashboardProps {
@@ -26,14 +26,6 @@ interface PilotStats {
   engineHours: number;
 }
 
-interface PeriodStats {
-  flights: number;
-  paxFlown: number;
-  revenue: number;
-  engineHours: number;
-  topRoute: string | null;
-}
-
 export default function Dashboard({ airports, routes }: DashboardProps) {
   const [paxPools, setPaxPools] = useState<PaxPool[]>([]);
   const [flightLogs, setFlightLogs] = useState<FlightLog[]>([]);
@@ -44,23 +36,18 @@ export default function Dashboard({ airports, routes }: DashboardProps) {
   const [refreshing, setRefreshing] = useState(false);
   const intervalRef = useRef<number | null>(null);
 
-  // Performance stats
   const [todayGenerated, setTodayGenerated] = useState(0);
   const [todayFlown, setTodayFlown] = useState(0);
   const [todayFlights, setTodayFlights] = useState(0);
   const [todayRevenue, setTodayRevenue] = useState(0);
-  const [weeklyStats, setWeeklyStats] = useState<PeriodStats>({ flights: 0, paxFlown: 0, revenue: 0, engineHours: 0, topRoute: null });
-  const [monthlyStats, setMonthlyStats] = useState<PeriodStats>({ flights: 0, paxFlown: 0, revenue: 0, engineHours: 0, topRoute: null });
   const [pilotLeaderboard, setPilotLeaderboard] = useState<PilotStats[]>([]);
-  const [fleetUtilization, setFleetUtilization] = useState({ total: 0, active: 0 });
-  const [statsTab, setStatsTab] = useState<'today' | 'week' | 'month'>('today');
 
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     else setRefreshing(true);
     const [pools, logsRes] = await Promise.all([
       fetchAllPaxPools(),
-      supabase.from('flight_logs').select('*').order('created_at', { ascending: false }).limit(50),
+      supabase.from('flight_logs').select('*').order('created_at', { ascending: false }).limit(10),
     ]);
     setPaxPools(pools);
     if (logsRes.data) setFlightLogs(logsRes.data);
@@ -77,7 +64,6 @@ export default function Dashboard({ airports, routes }: DashboardProps) {
   }, [fetchData]);
 
   async function fetchPerformanceStats() {
-    // Operational day starts at 0400Z (when pax regenerate)
     const now = new Date();
     const utcHour = now.getUTCHours();
     const operationalDayStart = new Date(now);
@@ -87,92 +73,30 @@ export default function Dashboard({ airports, routes }: DashboardProps) {
     operationalDayStart.setUTCHours(4, 0, 0, 0);
     const operationalDate = operationalDayStart.toISOString().slice(0, 10);
     const operationalStartISO = operationalDayStart.toISOString();
-
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const monthStart = operationalDate.slice(0, 7) + '-01';
 
     const [
       todayGenRes,
       todayLogsRes,
       todayRevenueRes,
-      weekLogsRes,
-      weekRevenueRes,
-      weekHoursRes,
-      monthLogsRes,
-      monthRevenueRes,
-      monthHoursRes,
-      fleetRes,
       pilotLogsRes,
       profilesRes,
     ] = await Promise.all([
       supabase.from('pax_pools').select('pax_count').eq('generated_date', operationalDate),
       supabase.from('flight_logs').select('*').gte('created_at', operationalStartISO),
       supabase.from('financial_transactions').select('amount').eq('type', 'ticket_revenue').gte('created_at', operationalStartISO),
-      supabase.from('flight_logs').select('*').gte('flight_date', weekAgo),
-      supabase.from('financial_transactions').select('amount').eq('type', 'ticket_revenue').gte('created_at', weekAgo + 'T00:00:00Z'),
-      supabase.from('flight_bookings').select('engine_hours').eq('status', 'completed').gte('created_at', weekAgo + 'T00:00:00Z'),
-      supabase.from('flight_logs').select('*').gte('flight_date', monthStart),
-      supabase.from('financial_transactions').select('amount').eq('type', 'ticket_revenue').gte('created_at', monthStart + 'T00:00:00Z'),
-      supabase.from('flight_bookings').select('engine_hours').eq('status', 'completed').gte('created_at', monthStart + 'T00:00:00Z'),
-      supabase.from('aircraft').select('id, status'),
       supabase.from('flight_logs').select('user_id, pax_count, flight_number').gte('flight_date', weekAgo),
       supabase.from('profiles').select('id, display_name'),
     ]);
 
-    // Today's generated pax
     const genTotal = (todayGenRes.data || []).reduce((s, r) => s + r.pax_count, 0);
     setTodayGenerated(genTotal);
 
-    // Today's flown pax and flights
     const todayLogs = todayLogsRes.data || [];
     setTodayFlown(todayLogs.reduce((s, l) => s + l.pax_count, 0));
     setTodayFlights(todayLogs.length);
 
-    // Today's revenue
     setTodayRevenue((todayRevenueRes.data || []).reduce((s, t) => s + Number(t.amount), 0));
-
-    // Weekly stats
-    const wLogs = weekLogsRes.data || [];
-    const wRevenue = (weekRevenueRes.data || []).reduce((s, t) => s + Number(t.amount), 0);
-    const wHours = (weekHoursRes.data || []).reduce((s, b) => s + Number(b.engine_hours || 0), 0);
-    const wRouteMap: Record<string, number> = {};
-    wLogs.forEach(l => {
-      const key = `${l.departure_icao}-${l.arrival_icao}`;
-      wRouteMap[key] = (wRouteMap[key] || 0) + 1;
-    });
-    const wTopRoute = Object.entries(wRouteMap).sort(([, a], [, b]) => b - a)[0]?.[0] || null;
-    setWeeklyStats({
-      flights: wLogs.length,
-      paxFlown: wLogs.reduce((s, l) => s + l.pax_count, 0),
-      revenue: wRevenue,
-      engineHours: wHours,
-      topRoute: wTopRoute,
-    });
-
-    // Monthly stats
-    const mLogs = monthLogsRes.data || [];
-    const mRevenue = (monthRevenueRes.data || []).reduce((s, t) => s + Number(t.amount), 0);
-    const mHours = (monthHoursRes.data || []).reduce((s, b) => s + Number(b.engine_hours || 0), 0);
-    const mRouteMap: Record<string, number> = {};
-    mLogs.forEach(l => {
-      const key = `${l.departure_icao}-${l.arrival_icao}`;
-      mRouteMap[key] = (mRouteMap[key] || 0) + 1;
-    });
-    const mTopRoute = Object.entries(mRouteMap).sort(([, a], [, b]) => b - a)[0]?.[0] || null;
-    setMonthlyStats({
-      flights: mLogs.length,
-      paxFlown: mLogs.reduce((s, l) => s + l.pax_count, 0),
-      revenue: mRevenue,
-      engineHours: mHours,
-      topRoute: mTopRoute,
-    });
-
-    // Fleet utilization
-    const fleet = fleetRes.data || [];
-    setFleetUtilization({
-      total: fleet.length,
-      active: fleet.filter(a => a.status === 'reserved' || a.status === 'in_flight').length,
-    });
 
     // Pilot leaderboard (last 7 days)
     const profiles = profilesRes.data || [];
@@ -187,7 +111,6 @@ export default function Dashboard({ airports, routes }: DashboardProps) {
       pilotMap[l.user_id].pax += l.pax_count;
     });
 
-    // Get engine hours per pilot
     const pilotIds = Object.keys(pilotMap);
     let pilotHoursMap: Record<string, number> = {};
     if (pilotIds.length > 0) {
@@ -300,12 +223,6 @@ export default function Dashboard({ airports, routes }: DashboardProps) {
     return 'text-red-400';
   }
 
-  function getPercentBg(pct: number): string {
-    if (pct >= 70) return 'bg-emerald-500';
-    if (pct >= 40) return 'bg-amber-500';
-    return 'bg-red-500';
-  }
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -313,10 +230,6 @@ export default function Dashboard({ airports, routes }: DashboardProps) {
       </div>
     );
   }
-
-  const activeStats = statsTab === 'today'
-    ? { flights: todayFlights, paxFlown: todayFlown, revenue: todayRevenue, engineHours: 0, topRoute: null }
-    : statsTab === 'week' ? weeklyStats : monthlyStats;
 
   return (
     <div className="space-y-6">
@@ -340,7 +253,7 @@ export default function Dashboard({ airports, routes }: DashboardProps) {
         </button>
       </div>
 
-      {/* Daily Performance Hero */}
+      {/* Today's Performance */}
       <div className="bg-gradient-to-br from-slate-800 to-slate-800/50 rounded-xl border border-slate-700 p-5 sm:p-6">
         <div className="flex items-center gap-3 mb-5">
           <div className="w-9 h-9 bg-sky-500/10 rounded-lg flex items-center justify-center">
@@ -352,9 +265,9 @@ export default function Dashboard({ airports, routes }: DashboardProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          {/* PAX Flown % - Hero metric */}
-          <div className="sm:col-span-2 lg:col-span-1 bg-slate-900/60 rounded-xl p-4 border border-slate-700/50 flex flex-col items-center justify-center">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* PAX Flown % */}
+          <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/50 flex flex-col items-center justify-center">
             <div className="relative w-20 h-20 mb-2">
               <svg className="w-20 h-20 transform -rotate-90" viewBox="0 0 36 36">
                 <path
@@ -402,19 +315,7 @@ export default function Dashboard({ airports, routes }: DashboardProps) {
             <p className="text-slate-500 text-[10px] mt-1">ticket revenue today</p>
           </div>
 
-          {/* Fleet Utilization */}
-          <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/50">
-            <div className="flex items-center gap-2 mb-2">
-              <BarChart3 className="w-4 h-4 text-sky-400" />
-              <span className="text-slate-400 text-xs font-medium">Fleet Active</span>
-            </div>
-            <p className="text-2xl font-bold text-white">
-              {fleetUtilization.total > 0 ? Math.round((fleetUtilization.active / fleetUtilization.total) * 100) : 0}%
-            </p>
-            <p className="text-slate-500 text-[10px] mt-1">{fleetUtilization.active} / {fleetUtilization.total} aircraft</p>
-          </div>
-
-          {/* PAX Generated today */}
+          {/* Demand */}
           <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/50">
             <div className="flex items-center gap-2 mb-2">
               <Users className="w-4 h-4 text-amber-400" />
@@ -424,91 +325,40 @@ export default function Dashboard({ airports, routes }: DashboardProps) {
             <p className="text-slate-500 text-[10px] mt-1">PAX generated today</p>
           </div>
         </div>
-
-        {/* Progress bar */}
-        <div className="mt-4">
-          <div className="flex items-center justify-between text-xs mb-1.5">
-            <span className="text-slate-400">Daily progress</span>
-            <span className={`font-medium ${getPercentColor(dailyPaxPercent)}`}>{todayFlown.toLocaleString()} of {todayGenerated.toLocaleString()} PAX</span>
-          </div>
-          <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${getPercentBg(dailyPaxPercent)}`}
-              style={{ width: `${Math.min(dailyPaxPercent, 100)}%` }}
-            />
-          </div>
-        </div>
       </div>
 
-      {/* Weekly / Monthly Stats + Leaderboard */}
+      {/* PAX Network Status + Pilot Leaderboard */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Period Stats */}
-        <div className="lg:col-span-2 bg-slate-800/50 rounded-xl border border-slate-700 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <Calendar className="w-5 h-5 text-sky-400" />
-              <h3 className="text-white font-semibold">Performance Stats</h3>
+        {/* PAX Status Summary */}
+        <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+            <div className="flex items-center gap-2 mb-1.5">
+              <Users className="w-4 h-4 text-amber-400" />
+              <span className="text-slate-400 text-xs">Waiting</span>
             </div>
-            <div className="flex bg-slate-900 rounded-lg p-0.5 border border-slate-700">
-              {(['today', 'week', 'month'] as const).map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setStatsTab(tab)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                    statsTab === tab
-                      ? 'bg-sky-500/20 text-sky-300'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {tab === 'today' ? 'Today' : tab === 'week' ? '7 Days' : 'Month'}
-                </button>
-              ))}
-            </div>
+            <p className="text-2xl font-bold text-white">{totalWaiting.toLocaleString()}</p>
           </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="bg-slate-900/50 rounded-lg p-4">
-              <p className="text-slate-400 text-xs font-medium mb-1">Flights</p>
-              <p className="text-2xl font-bold text-white">{activeStats.flights}</p>
+          <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+            <div className="flex items-center gap-2 mb-1.5">
+              <Plane className="w-4 h-4 text-cyan-400" />
+              <span className="text-slate-400 text-xs">In Transit</span>
             </div>
-            <div className="bg-slate-900/50 rounded-lg p-4">
-              <p className="text-slate-400 text-xs font-medium mb-1">PAX Delivered</p>
-              <p className="text-2xl font-bold text-white">{activeStats.paxFlown.toLocaleString()}</p>
-            </div>
-            <div className="bg-slate-900/50 rounded-lg p-4">
-              <p className="text-slate-400 text-xs font-medium mb-1">Revenue</p>
-              <p className="text-2xl font-bold text-emerald-400">${activeStats.revenue.toLocaleString()}</p>
-            </div>
-            <div className="bg-slate-900/50 rounded-lg p-4">
-              <p className="text-slate-400 text-xs font-medium mb-1">Engine Hours</p>
-              <p className="text-2xl font-bold text-white">{activeStats.engineHours.toFixed(1)}</p>
-            </div>
+            <p className="text-2xl font-bold text-white">{totalInTransit.toLocaleString()}</p>
           </div>
-
-          {activeStats.topRoute && (
-            <div className="mt-4 flex items-center gap-2 text-sm bg-slate-900/50 rounded-lg px-4 py-2.5">
-              <Plane className="w-4 h-4 text-sky-400" />
-              <span className="text-slate-400">Top Route:</span>
-              <span className="text-white font-mono font-semibold">{activeStats.topRoute.replace('-', ' -> ')}</span>
+          <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+            <div className="flex items-center gap-2 mb-1.5">
+              <Clock className="w-4 h-4 text-sky-400" />
+              <span className="text-slate-400 text-xs">Layover</span>
             </div>
-          )}
-
-          {statsTab !== 'today' && (
-            <div className="mt-4 grid grid-cols-2 gap-4">
-              <div className="bg-slate-900/50 rounded-lg p-4">
-                <p className="text-slate-400 text-xs font-medium mb-1">Avg PAX / Flight</p>
-                <p className="text-xl font-bold text-white">
-                  {activeStats.flights > 0 ? Math.round(activeStats.paxFlown / activeStats.flights) : 0}
-                </p>
-              </div>
-              <div className="bg-slate-900/50 rounded-lg p-4">
-                <p className="text-slate-400 text-xs font-medium mb-1">Revenue / Flight</p>
-                <p className="text-xl font-bold text-emerald-400">
-                  ${activeStats.flights > 0 ? Math.round(activeStats.revenue / activeStats.flights).toLocaleString() : 0}
-                </p>
-              </div>
+            <p className="text-2xl font-bold text-white">{totalLayover.toLocaleString()}</p>
+          </div>
+          <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+            <div className="flex items-center gap-2 mb-1.5">
+              <CheckCircle className="w-4 h-4 text-emerald-400" />
+              <span className="text-slate-400 text-xs">Arrived</span>
             </div>
-          )}
+            <p className="text-2xl font-bold text-white">{totalArrived.toLocaleString()}</p>
+          </div>
         </div>
 
         {/* Pilot Leaderboard */}
@@ -563,46 +413,7 @@ export default function Dashboard({ airports, routes }: DashboardProps) {
         </div>
       </div>
 
-      {/* PAX Status row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 bg-amber-500/10 rounded-lg flex items-center justify-center">
-              <Users className="w-5 h-5 text-amber-400" />
-            </div>
-            <span className="text-slate-400 text-sm">Waiting PAX</span>
-          </div>
-          <p className="text-3xl font-bold text-white">{totalWaiting.toLocaleString()}</p>
-        </div>
-        <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 bg-cyan-500/10 rounded-lg flex items-center justify-center">
-              <Plane className="w-5 h-5 text-cyan-400" />
-            </div>
-            <span className="text-slate-400 text-sm">In Transit</span>
-          </div>
-          <p className="text-3xl font-bold text-white">{totalInTransit.toLocaleString()}</p>
-        </div>
-        <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 bg-sky-500/10 rounded-lg flex items-center justify-center">
-              <Clock className="w-5 h-5 text-sky-400" />
-            </div>
-            <span className="text-slate-400 text-sm">On Layover</span>
-          </div>
-          <p className="text-3xl font-bold text-white">{totalLayover.toLocaleString()}</p>
-        </div>
-        <div className="bg-slate-800 rounded-xl p-5 border border-slate-700">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 bg-emerald-500/10 rounded-lg flex items-center justify-center">
-              <CheckCircle className="w-5 h-5 text-emerald-400" />
-            </div>
-            <span className="text-slate-400 text-sm">Arrived at Destination</span>
-          </div>
-          <p className="text-3xl font-bold text-white">{totalArrived.toLocaleString()}</p>
-        </div>
-      </div>
-
+      {/* Airport Table + Detail Panel */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Airport list */}
         <div className="lg:col-span-2 bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
@@ -684,7 +495,7 @@ export default function Dashboard({ airports, routes }: DashboardProps) {
                   className="flex items-center gap-1.5 text-xs bg-sky-500/20 text-sky-300 hover:bg-sky-500/30 px-3 py-1.5 rounded-lg transition-colors"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
-                  View Map & Details
+                  Full Details
                 </button>
               </div>
 
