@@ -312,7 +312,6 @@ function Acars({ currentUserId, simbriefId }: AcarsProps) {
   }, [bookings]);
 
   const activeAcars = useMemo(() => acarsFlights.filter(a => !a.ended_at), [acarsFlights]);
-  const completedAcars = useMemo(() => acarsFlights.filter(a => a.ended_at), [acarsFlights]);
   const unbookedFlights = useMemo(() =>
     bookings.filter(b => b.status === 'booked' && b.user_id === currentUserId && !acarsFlights.some(a => a.booking_id === b.id)),
     [bookings, acarsFlights, currentUserId]
@@ -426,32 +425,25 @@ function Acars({ currentUserId, simbriefId }: AcarsProps) {
         </div>
       )}
 
-      {/* Stats bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-3">
-          <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Active Flights</p>
-          <p className="text-xl font-bold text-emerald-400 mt-1">{activeAcars.length}</p>
+      {/* ACARS header */}
+      <div className="flex items-center gap-3 mb-1">
+        <div className="flex items-center gap-2">
+          <Radar className="w-5 h-5 text-emerald-400" />
+          <h2 className="text-white font-bold text-lg tracking-wide uppercase">ACARS Logging</h2>
         </div>
-        <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-3">
-          <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Awaiting Track</p>
-          <p className="text-xl font-bold text-sky-400 mt-1">{unbookedFlights.length}</p>
-        </div>
-        <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-3">
-          <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Completed Today</p>
-          <p className="text-xl font-bold text-white mt-1">{completedAcars.length}</p>
-        </div>
-        <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-3">
-          <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">PAX In Transit</p>
-          <p className="text-xl font-bold text-amber-400 mt-1">
-            {paxPools.reduce((s, p) => s + p.pax_count, 0)}
-          </p>
-        </div>
+        {isTauriApp && simStatus && (
+          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+            simStatus.connected ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/30 text-slate-400'
+          }`}>
+            {simStatus.connected ? 'SimConnect Active' : 'SimConnect Idle'}
+          </span>
+        )}
       </div>
 
       {/* Main 3-panel layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Left panel: Active Flights + Bookings + Checklist */}
-        <div className="lg:col-span-4 space-y-4">
+        {/* Left panel: Active Flights + Bookings */}
+        <div className="lg:col-span-3 space-y-4">
           {/* Active ACARS Flights */}
           <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-700 flex items-center gap-2">
@@ -554,170 +546,10 @@ function Acars({ currentUserId, simbriefId }: AcarsProps) {
             </div>
           </div>
 
-          {/* Aircraft Checklist */}
-          {selectedAcars && selectedBooking && selectedAircraftChecklist && (
-            <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-700 flex items-center gap-2">
-                <ClipboardList className="w-4 h-4 text-sky-400" />
-                <h3 className="text-white font-semibold text-sm">{selectedAircraftChecklist.aircraft} Checklist</h3>
-                <button
-                  onClick={resetChecklist}
-                  className="ml-auto p-1 text-slate-400 hover:text-white rounded transition-colors"
-                  title="Reset checklist"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              {/* Tab navigation */}
-              <div className="border-b border-slate-700">
-                <div className="flex items-center px-2 py-1.5 gap-1">
-                  <button
-                    onClick={() => setChecklistTab(Math.max(0, checklistTab - 1))}
-                    disabled={checklistTab === 0}
-                    className="p-1 text-slate-400 hover:text-white disabled:opacity-30 disabled:hover:text-slate-400 rounded transition-colors shrink-0"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                  </button>
-                  <div className="flex-1 overflow-x-auto scrollbar-none">
-                    <div className="flex gap-0.5 min-w-max">
-                      {selectedAircraftChecklist.sections.map((section, idx) => {
-                        const progress = getSectionProgress(section);
-                        const isComplete = progress.checked === progress.total;
-                        const isActive = checklistTab === idx;
-                        return (
-                          <button
-                            key={section.title}
-                            onClick={() => setChecklistTab(idx)}
-                            className={`px-2 py-1 text-[10px] font-medium whitespace-nowrap rounded transition-colors ${
-                              isActive
-                                ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
-                                : isComplete
-                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                : 'text-slate-400 hover:text-slate-300 hover:bg-slate-700/30 border border-transparent'
-                            }`}
-                          >
-                            {isComplete && <Check className="w-2.5 h-2.5 inline mr-0.5" />}
-                            {idx + 1}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setChecklistTab(Math.min(selectedAircraftChecklist.sections.length - 1, checklistTab + 1))}
-                    disabled={checklistTab === selectedAircraftChecklist.sections.length - 1}
-                    className="p-1 text-slate-400 hover:text-white disabled:opacity-30 disabled:hover:text-slate-400 rounded transition-colors shrink-0"
-                  >
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Active section title + progress */}
-              {selectedAircraftChecklist.sections[checklistTab] && (() => {
-                const section = selectedAircraftChecklist.sections[checklistTab];
-                const progress = getSectionProgress(section);
-                return (
-                  <div className="px-4 py-2.5 border-b border-slate-700/50 bg-slate-900/30">
-                    <div className="flex items-center justify-between">
-                      <span className="text-white text-xs font-semibold">{section.title}</span>
-                      <span className={`text-[10px] font-mono ${
-                        progress.checked === progress.total ? 'text-emerald-400' : 'text-slate-400'
-                      }`}>
-                        {progress.checked}/{progress.total}
-                      </span>
-                    </div>
-                    <div className="mt-1.5 h-1 bg-slate-700 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-                        style={{ width: `${progress.total > 0 ? (progress.checked / progress.total) * 100 : 0}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Checklist items */}
-              <div className="max-h-[400px] overflow-y-auto">
-                {selectedAircraftChecklist.sections[checklistTab] && (
-                  <div className="divide-y divide-slate-700/30">
-                    {selectedAircraftChecklist.sections[checklistTab].items.map((item, idx) => {
-                      const sectionTitle = selectedAircraftChecklist.sections[checklistTab].title;
-                      const isChecked = checkedItems[sectionTitle]?.has(idx) || false;
-                      return (
-                        <button
-                          key={`${sectionTitle}-${idx}`}
-                          onClick={() => toggleCheckItem(sectionTitle, idx)}
-                          className={`w-full flex items-start gap-2.5 px-4 py-2.5 text-left transition-colors ${
-                            isChecked ? 'bg-emerald-500/5' : 'hover:bg-slate-700/20'
-                          }`}
-                        >
-                          <div className={`mt-0.5 w-4 h-4 rounded-sm border shrink-0 flex items-center justify-center transition-colors ${
-                            isChecked
-                              ? 'bg-emerald-500 border-emerald-500'
-                              : 'border-slate-500 bg-slate-800'
-                          }`}>
-                            {isChecked && <Check className="w-3 h-3 text-white" />}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <span className={`text-xs leading-relaxed ${
-                              isChecked ? 'text-slate-400 line-through' : 'text-white'
-                            }`}>
-                              {item.label}
-                            </span>
-                          </div>
-                          {item.state && (
-                            <span className={`text-[10px] font-mono shrink-0 ${
-                              isChecked ? 'text-emerald-500' : 'text-sky-400'
-                            }`}>
-                              {item.state}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Section navigation footer */}
-              <div className="px-4 py-3 border-t border-slate-700 flex items-center justify-between">
-                <button
-                  onClick={() => setChecklistTab(Math.max(0, checklistTab - 1))}
-                  disabled={checklistTab === 0}
-                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-white disabled:opacity-30 transition-colors"
-                >
-                  <ChevronLeft className="w-3 h-3" />
-                  Prev
-                </button>
-                <span className="text-[10px] text-slate-500">
-                  {checklistTab + 1} / {selectedAircraftChecklist.sections.length}
-                </span>
-                <button
-                  onClick={() => setChecklistTab(Math.min(selectedAircraftChecklist.sections.length - 1, checklistTab + 1))}
-                  disabled={checklistTab === selectedAircraftChecklist.sections.length - 1}
-                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-white disabled:opacity-30 transition-colors"
-                >
-                  Next
-                  <ChevronRight className="w-3 h-3" />
-                </button>
-              </div>
-            </div>
-          )}
-
-          {selectedAcars && selectedBooking && !selectedAircraftChecklist && (
-            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
-              <div className="flex items-center gap-2 text-slate-500">
-                <ClipboardList className="w-4 h-4" />
-                <span className="text-xs">No checklist available for this aircraft type</span>
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* Center panel: Flight Detail + Controls */}
-        <div className="lg:col-span-5">
+        {/* Center panel: Flight Detail + Controls + Checklist */}
+        <div className="lg:col-span-6 space-y-4">
           {selectedAcars && selectedBooking ? (
             <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
               {/* Flight header */}
@@ -1109,6 +941,167 @@ function Acars({ currentUserId, simbriefId }: AcarsProps) {
               <Radar className="w-10 h-10 text-slate-600 mx-auto mb-3" />
               <p className="text-slate-400 text-sm font-medium">Select an active flight</p>
               <p className="text-slate-500 text-xs mt-1">Click a tracked flight to view telemetry and controls</p>
+            </div>
+          )}
+
+          {/* Aircraft Checklist */}
+          {selectedAcars && selectedBooking && selectedAircraftChecklist && (
+            <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-700 flex items-center gap-2">
+                <ClipboardList className="w-4 h-4 text-sky-400" />
+                <h3 className="text-white font-semibold text-sm">{selectedAircraftChecklist.aircraft} Checklist</h3>
+                <button
+                  onClick={resetChecklist}
+                  className="ml-auto p-1 text-slate-400 hover:text-white rounded transition-colors"
+                  title="Reset checklist"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Tab navigation */}
+              <div className="border-b border-slate-700">
+                <div className="flex items-center px-2 py-1.5 gap-1">
+                  <button
+                    onClick={() => setChecklistTab(Math.max(0, checklistTab - 1))}
+                    disabled={checklistTab === 0}
+                    className="p-1 text-slate-400 hover:text-white disabled:opacity-30 disabled:hover:text-slate-400 rounded transition-colors shrink-0"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <div className="flex-1 overflow-x-auto scrollbar-none">
+                    <div className="flex gap-0.5 min-w-max">
+                      {selectedAircraftChecklist.sections.map((section, idx) => {
+                        const progress = getSectionProgress(section);
+                        const isComplete = progress.checked === progress.total;
+                        const isActive = checklistTab === idx;
+                        return (
+                          <button
+                            key={section.title}
+                            onClick={() => setChecklistTab(idx)}
+                            className={`px-2 py-1 text-[10px] font-medium whitespace-nowrap rounded transition-colors ${
+                              isActive
+                                ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
+                                : isComplete
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                : 'text-slate-400 hover:text-slate-300 hover:bg-slate-700/30 border border-transparent'
+                            }`}
+                          >
+                            {isComplete && <Check className="w-2.5 h-2.5 inline mr-0.5" />}
+                            {idx + 1}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setChecklistTab(Math.min(selectedAircraftChecklist.sections.length - 1, checklistTab + 1))}
+                    disabled={checklistTab === selectedAircraftChecklist.sections.length - 1}
+                    className="p-1 text-slate-400 hover:text-white disabled:opacity-30 disabled:hover:text-slate-400 rounded transition-colors shrink-0"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Active section title + progress */}
+              {selectedAircraftChecklist.sections[checklistTab] && (() => {
+                const section = selectedAircraftChecklist.sections[checklistTab];
+                const progress = getSectionProgress(section);
+                return (
+                  <div className="px-4 py-2.5 border-b border-slate-700/50 bg-slate-900/30">
+                    <div className="flex items-center justify-between">
+                      <span className="text-white text-xs font-semibold">{section.title}</span>
+                      <span className={`text-[10px] font-mono ${
+                        progress.checked === progress.total ? 'text-emerald-400' : 'text-slate-400'
+                      }`}>
+                        {progress.checked}/{progress.total}
+                      </span>
+                    </div>
+                    <div className="mt-1.5 h-1 bg-slate-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                        style={{ width: `${progress.total > 0 ? (progress.checked / progress.total) * 100 : 0}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Checklist items */}
+              <div className="max-h-[400px] overflow-y-auto">
+                {selectedAircraftChecklist.sections[checklistTab] && (
+                  <div className="divide-y divide-slate-700/30">
+                    {selectedAircraftChecklist.sections[checklistTab].items.map((item, idx) => {
+                      const sectionTitle = selectedAircraftChecklist.sections[checklistTab].title;
+                      const isChecked = checkedItems[sectionTitle]?.has(idx) || false;
+                      return (
+                        <button
+                          key={`${sectionTitle}-${idx}`}
+                          onClick={() => toggleCheckItem(sectionTitle, idx)}
+                          className={`w-full flex items-start gap-2.5 px-4 py-2.5 text-left transition-colors ${
+                            isChecked ? 'bg-emerald-500/5' : 'hover:bg-slate-700/20'
+                          }`}
+                        >
+                          <div className={`mt-0.5 w-4 h-4 rounded-sm border shrink-0 flex items-center justify-center transition-colors ${
+                            isChecked
+                              ? 'bg-emerald-500 border-emerald-500'
+                              : 'border-slate-500 bg-slate-800'
+                          }`}>
+                            {isChecked && <Check className="w-3 h-3 text-white" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className={`text-xs leading-relaxed ${
+                              isChecked ? 'text-slate-400 line-through' : 'text-white'
+                            }`}>
+                              {item.label}
+                            </span>
+                          </div>
+                          {item.state && (
+                            <span className={`text-[10px] font-mono shrink-0 ${
+                              isChecked ? 'text-emerald-500' : 'text-sky-400'
+                            }`}>
+                              {item.state}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Section navigation footer */}
+              <div className="px-4 py-3 border-t border-slate-700 flex items-center justify-between">
+                <button
+                  onClick={() => setChecklistTab(Math.max(0, checklistTab - 1))}
+                  disabled={checklistTab === 0}
+                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-white disabled:opacity-30 transition-colors"
+                >
+                  <ChevronLeft className="w-3 h-3" />
+                  Prev
+                </button>
+                <span className="text-[10px] text-slate-500">
+                  {checklistTab + 1} / {selectedAircraftChecklist.sections.length}
+                </span>
+                <button
+                  onClick={() => setChecklistTab(Math.min(selectedAircraftChecklist.sections.length - 1, checklistTab + 1))}
+                  disabled={checklistTab === selectedAircraftChecklist.sections.length - 1}
+                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-white disabled:opacity-30 transition-colors"
+                >
+                  Next
+                  <ChevronRight className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {selectedAcars && selectedBooking && !selectedAircraftChecklist && (
+            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+              <div className="flex items-center gap-2 text-slate-500">
+                <ClipboardList className="w-4 h-4" />
+                <span className="text-xs">No checklist available for this aircraft type</span>
+              </div>
             </div>
           )}
         </div>
