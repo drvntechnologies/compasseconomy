@@ -11,7 +11,7 @@ import Fleet from './components/Fleet';
 import Gates from './components/Gates';
 import Finances from './components/Finances';
 import Acars from './components/Acars';
-import { Plane, LogOut, LayoutDashboard, Settings, Users, Navigation, Clock, Gauge, Radio, Radar, PanelLeftClose, PanelLeft, DoorOpen, DollarSign, KeyRound, Sun, Moon, Monitor, Laptop, Menu, X } from 'lucide-react';
+import { Plane, LogOut, LayoutDashboard, Settings, Users, Navigation, Clock, Gauge, Radio, Radar, PanelLeftClose, PanelLeft, DoorOpen, DollarSign, KeyRound, Sun, Moon, Monitor, Laptop, Menu, X, ChevronDown } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 
 export default function App() {
@@ -155,18 +155,34 @@ export default function App() {
 
   const isAdmin = profile?.role === 'admin';
 
+  const [flightOpsOpen, setFlightOpsOpen] = useState(() => {
+    return ['fleet', 'gates', 'finances'].includes(activeView);
+  });
+  const [paxOpsOpen, setPaxOpsOpen] = useState(() => {
+    return ['planner', 'capacity'].includes(activeView);
+  });
+
   const localTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const utcTime = now.toUTCString().slice(17, 25);
   const localDate = now.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
 
-  const navItems = [
+  const topNavItems = [
     { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'dispatch' as const, label: 'Dispatch/Logging', icon: Radio },
+  ];
+
+  const flightOpsItems = [
     { id: 'fleet' as const, label: 'Fleet', icon: Plane },
     { id: 'gates' as const, label: 'Gates', icon: DoorOpen },
     { id: 'finances' as const, label: 'Finances', icon: DollarSign },
+  ];
+
+  const paxOpsItems = [
     { id: 'planner' as const, label: 'Planner', icon: Navigation },
     { id: 'capacity' as const, label: 'Capacity', icon: Gauge },
+  ];
+
+  const bottomNavItems = [
     ...(isAdmin ? [
       { id: 'acars' as const, label: 'ACARS DEV', icon: Radar },
       { id: 'admin' as const, label: 'Admin', icon: Settings },
@@ -224,7 +240,113 @@ export default function App() {
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {navItems.map(item => {
+          {topNavItems.map(item => {
+            const Icon = item.icon;
+            const isActive = activeView === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => { setActiveView(item.id); setMobileMenuOpen(false); }}
+                title={sidebarCollapsed ? item.label : undefined}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                  isActive
+                    ? 'bg-sky-500/10 text-sky-400'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                }`}
+              >
+                <Icon className="w-[18px] h-[18px] shrink-0" />
+                {!sidebarCollapsed && <span className="whitespace-nowrap">{item.label}</span>}
+              </button>
+            );
+          })}
+
+          {/* Flight Ops dropdown */}
+          <div>
+            <button
+              onClick={() => { if (sidebarCollapsed) { setActiveView('fleet'); setMobileMenuOpen(false); } else { setFlightOpsOpen(!flightOpsOpen); } }}
+              title={sidebarCollapsed ? 'Flight Ops' : undefined}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                flightOpsItems.some(i => activeView === i.id)
+                  ? 'bg-sky-500/10 text-sky-400'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+              }`}
+            >
+              <Plane className="w-[18px] h-[18px] shrink-0" />
+              {!sidebarCollapsed && (
+                <>
+                  <span className="whitespace-nowrap flex-1 text-left">Flight Ops</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${flightOpsOpen ? 'rotate-180' : ''}`} />
+                </>
+              )}
+            </button>
+            {!sidebarCollapsed && flightOpsOpen && (
+              <div className="mt-1 ml-5 pl-3 border-l border-slate-700 space-y-0.5">
+                {flightOpsItems.map(item => {
+                  const Icon = item.icon;
+                  const isActive = activeView === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => { setActiveView(item.id); setMobileMenuOpen(false); }}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all ${
+                        isActive
+                          ? 'bg-sky-500/10 text-sky-400 font-medium'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4 shrink-0" />
+                      <span className="whitespace-nowrap">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Pax Ops dropdown */}
+          <div>
+            <button
+              onClick={() => { if (sidebarCollapsed) { setActiveView('planner'); setMobileMenuOpen(false); } else { setPaxOpsOpen(!paxOpsOpen); } }}
+              title={sidebarCollapsed ? 'Pax Ops' : undefined}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                paxOpsItems.some(i => activeView === i.id)
+                  ? 'bg-sky-500/10 text-sky-400'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+              }`}
+            >
+              <Users className="w-[18px] h-[18px] shrink-0" />
+              {!sidebarCollapsed && (
+                <>
+                  <span className="whitespace-nowrap flex-1 text-left">Pax Ops</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${paxOpsOpen ? 'rotate-180' : ''}`} />
+                </>
+              )}
+            </button>
+            {!sidebarCollapsed && paxOpsOpen && (
+              <div className="mt-1 ml-5 pl-3 border-l border-slate-700 space-y-0.5">
+                {paxOpsItems.map(item => {
+                  const Icon = item.icon;
+                  const isActive = activeView === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => { setActiveView(item.id); setMobileMenuOpen(false); }}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all ${
+                        isActive
+                          ? 'bg-sky-500/10 text-sky-400 font-medium'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4 shrink-0" />
+                      <span className="whitespace-nowrap">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {bottomNavItems.map(item => {
             const Icon = item.icon;
             const isActive = activeView === item.id;
             return (
