@@ -40,6 +40,8 @@ export default function App() {
     return localStorage.getItem('win7') === 'true';
   });
   const intervalRef = useRef<number | null>(null);
+  const [flightOpsOpen, setFlightOpsOpen] = useState(true);
+  const [paxOpsOpen, setPaxOpsOpen] = useState(false);
 
   useEffect(() => {
     if (darkMode) {
@@ -154,13 +156,6 @@ export default function App() {
   }
 
   const isAdmin = profile?.role === 'admin';
-
-  const [flightOpsOpen, setFlightOpsOpen] = useState(() => {
-    return ['fleet', 'gates', 'finances'].includes(activeView);
-  });
-  const [paxOpsOpen, setPaxOpsOpen] = useState(() => {
-    return ['planner', 'capacity'].includes(activeView);
-  });
 
   const localTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const utcTime = now.toUTCString().slice(17, 25);
