@@ -374,6 +374,7 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
 
     // Reserve pax pools
     let paxToReserve = actualPax;
+    let reservationFailed = false;
     for (const pool of availablePools) {
       if (paxToReserve <= 0) break;
 
@@ -381,16 +382,18 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
       paxToReserve -= paxFromPool;
 
       if (paxFromPool === pool.pax_count) {
-        await supabase.from('pax_pools').update({
+        const { error: updErr } = await supabase.from('pax_pools').update({
           status: 'in_transit',
           booking_id: booking.id,
         }).eq('id', pool.id);
+        if (updErr) { reservationFailed = true; break; }
       } else {
-        await supabase.from('pax_pools').update({
+        const { error: splitErr } = await supabase.from('pax_pools').update({
           pax_count: pool.pax_count - paxFromPool,
         }).eq('id', pool.id);
+        if (splitErr) { reservationFailed = true; break; }
 
-        await supabase.from('pax_pools').insert({
+        const { error: insErr } = await supabase.from('pax_pools').insert({
           origin_icao: pool.origin_icao,
           destination_icao: pool.destination_icao,
           current_airport_icao: pool.current_airport_icao,
@@ -400,7 +403,25 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
           generated_date: pool.generated_date,
           booking_id: booking.id,
         });
+        if (insErr) {
+          // Roll back the split reduction
+          await supabase.from('pax_pools').update({
+            pax_count: pool.pax_count,
+          }).eq('id', pool.id);
+          reservationFailed = true;
+          break;
+        }
       }
+    }
+
+    if (reservationFailed) {
+      // Cancel the booking since pax reservation failed
+      await supabase.from('flight_bookings').update({ status: 'cancelled' }).eq('id', booking.id);
+      await supabase.from('aircraft').update({ status: 'available', reserved_by_booking_id: null }).eq('id', selectedAircraftId);
+      setBookingError('Failed to reserve passengers. Please try again.');
+      setSubmitting(false);
+      fetchAircraft();
+      return;
     }
 
     const cappedNote = actualPax < requestedPax
