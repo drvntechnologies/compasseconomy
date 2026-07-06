@@ -1511,8 +1511,8 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
             </div>
           )}
 
-          {/* Complete Flight Card - shows when parked (engines off) */}
-          {selectedAcars && selectedBooking && effectivePhase === 'parked' && !selectedAcars.ended_at && (
+          {/* Complete Flight Card - shows during arrival taxi or parked */}
+          {selectedAcars && selectedBooking && (effectivePhase === 'parked' || effectivePhase === 'arrival_taxi') && !selectedAcars.ended_at && (
             <div className="bg-slate-800/50 border border-sky-500/30 rounded-xl overflow-hidden animate-in">
               <div className="px-4 py-3 border-b border-sky-500/20 bg-sky-500/5 flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-sky-400" />
@@ -1520,7 +1520,7 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
               </div>
               <div className="p-4 space-y-3">
                 <p className="text-xs text-slate-400">
-                  Engines off at {selectedBooking.arrival_icao}. Complete the flight to process passengers, cargo, and record revenue.
+                  {effectivePhase === 'parked' ? 'Engines off' : 'Arriving'} at {selectedBooking.arrival_icao}. Complete the flight to process passengers, cargo, and record revenue.
                 </p>
 
                 {/* Auto-calculated engine hours */}
