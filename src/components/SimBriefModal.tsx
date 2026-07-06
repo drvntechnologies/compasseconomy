@@ -300,7 +300,6 @@ export default function SimBriefModal({
             src={simbriefUrl}
             className="w-full h-full border-0"
             onLoad={() => setIframeLoaded(true)}
-            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
             title="SimBrief Dispatch"
           />
         </div>
