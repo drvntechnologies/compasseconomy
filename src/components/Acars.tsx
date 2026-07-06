@@ -171,6 +171,18 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
       started_at: new Date().toISOString(),
     });
 
+    // Enable position reporting via SimConnect if running in Tauri
+    if (isTauriApp) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bgbfknpzkidqodagqvna.supabase.co';
+        await invokeCommand('start_flight_tracking', {
+          supabaseUrl,
+          supabaseToken: session.access_token,
+        });
+      }
+    }
+
     setStartingTracking(null);
     fetchData();
   }
@@ -200,6 +212,10 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
 
     // Transition booking back so dispatch can handle it
     await supabase.from('flight_bookings').update({ status: 'booked' }).eq('id', acars.booking_id);
+
+    if (isTauriApp) {
+      await invokeCommand('stop_flight_tracking');
+    }
 
     fetchData();
   }
@@ -464,6 +480,10 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
       altitude_ft: 0,
       vs_fpm: 0,
     }).eq('id', acars.id);
+
+    if (isTauriApp) {
+      await invokeCommand('stop_flight_tracking');
+    }
 
     setCompletingFlight(false);
     setCompletionSuccess(`Flight completed! ${hours.toFixed(1)}hrs logged. Net: $${Math.round(balanceChange).toLocaleString()}`);
@@ -810,7 +830,7 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
                     <div className="bg-slate-900/50 rounded-lg p-3 text-center">
                       <TrendingUp className="w-4 h-4 text-sky-400 mx-auto mb-1" />
                       <p className="text-white font-mono font-bold text-sm">
-                        {(liveTelemetry && simStatus?.tracking)
+                        {(liveTelemetry && simStatus?.connected)
                           ? liveTelemetry.altitude_ft.toLocaleString()
                           : selectedAcars.altitude_ft != null ? selectedAcars.altitude_ft.toLocaleString() : '---'}
                       </p>
@@ -819,7 +839,7 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
                     <div className="bg-slate-900/50 rounded-lg p-3 text-center">
                       <Gauge className="w-4 h-4 text-emerald-400 mx-auto mb-1" />
                       <p className="text-white font-mono font-bold text-sm">
-                        {(liveTelemetry && simStatus?.tracking)
+                        {(liveTelemetry && simStatus?.connected)
                           ? liveTelemetry.ground_speed_kts
                           : selectedAcars.ground_speed_kts ?? '---'}
                       </p>
@@ -828,18 +848,18 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
                     <div className="bg-slate-900/50 rounded-lg p-3 text-center">
                       <Compass className="w-4 h-4 text-amber-400 mx-auto mb-1" />
                       <p className="text-white font-mono font-bold text-sm">
-                        {(liveTelemetry && simStatus?.tracking)
+                        {(liveTelemetry && simStatus?.connected)
                           ? `${liveTelemetry.heading_deg}°`
                           : selectedAcars.heading_deg != null ? `${selectedAcars.heading_deg}°` : '---'}
                       </p>
                       <p className="text-[10px] text-slate-500">HDG</p>
                     </div>
                     <div className="bg-slate-900/50 rounded-lg p-3 text-center">
-                      {((liveTelemetry && simStatus?.tracking) ? liveTelemetry.vs_fpm : (selectedAcars.vs_fpm ?? 0)) >= 0
+                      {((liveTelemetry && simStatus?.connected) ? liveTelemetry.vs_fpm : (selectedAcars.vs_fpm ?? 0)) >= 0
                         ? <TrendingUp className="w-4 h-4 text-green-400 mx-auto mb-1" />
                         : <TrendingDown className="w-4 h-4 text-red-400 mx-auto mb-1" />}
                       <p className="text-white font-mono font-bold text-sm">
-                        {(liveTelemetry && simStatus?.tracking)
+                        {(liveTelemetry && simStatus?.connected)
                           ? `${liveTelemetry.vs_fpm > 0 ? '+' : ''}${liveTelemetry.vs_fpm}`
                           : selectedAcars.vs_fpm != null ? `${selectedAcars.vs_fpm > 0 ? '+' : ''}${selectedAcars.vs_fpm}` : '---'}
                       </p>
@@ -848,7 +868,7 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
                     <div className="bg-slate-900/50 rounded-lg p-3 text-center">
                       <Fuel className="w-4 h-4 text-orange-400 mx-auto mb-1" />
                       <p className="text-white font-mono font-bold text-sm">
-                        {(liveTelemetry && simStatus?.tracking)
+                        {(liveTelemetry && simStatus?.connected)
                           ? Math.round(liveTelemetry.fuel_lbs).toLocaleString()
                           : selectedAcars.fuel_lbs != null ? Math.round(Number(selectedAcars.fuel_lbs)).toLocaleString() : '---'}
                       </p>
@@ -857,7 +877,7 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
                     <div className="bg-slate-900/50 rounded-lg p-3 text-center">
                       <Clock className="w-4 h-4 text-violet-400 mx-auto mb-1" />
                       <p className="text-white font-mono font-bold text-sm">
-                        {(liveTelemetry && simStatus?.tracking)
+                        {(liveTelemetry && simStatus?.connected)
                           ? `${liveTelemetry.sim_rate}x`
                           : `${selectedAcars.sim_rate}x`}
                       </p>
