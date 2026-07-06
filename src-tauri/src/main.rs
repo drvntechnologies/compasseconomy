@@ -3,56 +3,54 @@
 mod simconnect_bridge;
 
 use simconnect_bridge::SimState;
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 #[tauri::command]
-async fn get_simconnect_status(state: tauri::State<'_, Arc<Mutex<SimState>>>) -> Result<String, String> {
-    let sim = state.lock().await;
-    Ok(serde_json::to_string(&sim.status()).map_err(|e| e.to_string())?)
+fn get_simconnect_status(state: tauri::State<'_, Arc<Mutex<SimState>>>) -> Result<String, String> {
+    let sim = state.lock().map_err(|e| e.to_string())?;
+    serde_json::to_string(&sim.status()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn start_simconnect(
+fn start_simconnect(
     app: tauri::AppHandle,
     state: tauri::State<'_, Arc<Mutex<SimState>>>,
 ) -> Result<(), String> {
     let shared = state.inner().clone();
-    let mut sim = state.lock().await;
-    sim.connect(&app, shared).map_err(|e| e.to_string())
+    let mut sim = state.lock().map_err(|e| e.to_string())?;
+    sim.connect(&app, shared)
+    // Lock is dropped here; the spawned thread can now access the state
 }
 
 #[tauri::command]
-async fn stop_simconnect(state: tauri::State<'_, Arc<Mutex<SimState>>>) -> Result<(), String> {
-    let mut sim = state.lock().await;
+fn stop_simconnect(state: tauri::State<'_, Arc<Mutex<SimState>>>) -> Result<(), String> {
+    let mut sim = state.lock().map_err(|e| e.to_string())?;
     sim.disconnect();
     Ok(())
 }
 
 #[tauri::command]
-async fn start_flight_tracking(
+fn start_flight_tracking(
     state: tauri::State<'_, Arc<Mutex<SimState>>>,
     supabase_url: String,
     supabase_token: String,
 ) -> Result<(), String> {
-    let mut sim = state.lock().await;
+    let mut sim = state.lock().map_err(|e| e.to_string())?;
     sim.start_tracking(supabase_url, supabase_token);
     Ok(())
 }
 
 #[tauri::command]
-async fn stop_flight_tracking(state: tauri::State<'_, Arc<Mutex<SimState>>>) -> Result<(), String> {
-    let mut sim = state.lock().await;
+fn stop_flight_tracking(state: tauri::State<'_, Arc<Mutex<SimState>>>) -> Result<(), String> {
+    let mut sim = state.lock().map_err(|e| e.to_string())?;
     sim.stop_tracking();
     Ok(())
 }
 
 #[tauri::command]
-async fn get_current_telemetry(
-    state: tauri::State<'_, Arc<Mutex<SimState>>>,
-) -> Result<String, String> {
-    let sim = state.lock().await;
-    Ok(serde_json::to_string(&sim.telemetry()).map_err(|e| e.to_string())?)
+fn get_current_telemetry(state: tauri::State<'_, Arc<Mutex<SimState>>>) -> Result<String, String> {
+    let sim = state.lock().map_err(|e| e.to_string())?;
+    serde_json::to_string(&sim.telemetry()).map_err(|e| e.to_string())
 }
 
 fn main() {
