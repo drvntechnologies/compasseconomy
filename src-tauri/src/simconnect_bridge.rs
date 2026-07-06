@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 #[cfg(windows)]
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Telemetry {
@@ -304,7 +304,7 @@ struct AircraftData {
 async fn simconnect_poll_loop(app: tauri::AppHandle, state: Arc<Mutex<SimState>>) {
     use std::time::{Duration, Instant};
 
-    // SimConnect is synchronous -- run in a blocking thread
+    let state_clone = Arc::clone(&state);
     let result = tokio::task::spawn_blocking(move || {
         let mut client = match SimConnect::new("CompassAtlantic-ACARS") {
             Ok(c) => c,
@@ -318,10 +318,9 @@ async fn simconnect_poll_loop(app: tauri::AppHandle, state: Arc<Mutex<SimState>>
         let report_interval = Duration::from_secs(120);
 
         loop {
-            // Check connected flag
             let still_connected = {
                 let rt = tokio::runtime::Handle::current();
-                rt.block_on(async { state.lock().await.connected })
+                rt.block_on(async { state_clone.lock().await.connected })
             };
             if !still_connected {
                 break;
@@ -354,7 +353,7 @@ async fn simconnect_poll_loop(app: tauri::AppHandle, state: Arc<Mutex<SimState>>
 
                         let rt = tokio::runtime::Handle::current();
                         let phase_str = rt.block_on(async {
-                            let mut s = state.lock().await;
+                            let mut s = state_clone.lock().await;
                             s.current_telemetry = telemetry.clone();
                             s.detect_phase();
                             s.current_phase.as_str().to_string()
@@ -363,11 +362,10 @@ async fn simconnect_poll_loop(app: tauri::AppHandle, state: Arc<Mutex<SimState>>
                         let _ = app.emit("simconnect-telemetry", &telemetry);
                         let _ = app.emit("simconnect-phase", &phase_str);
 
-                        // Periodic position report to Supabase
                         if last_report.elapsed() >= report_interval {
                             let rt = tokio::runtime::Handle::current();
                             rt.block_on(async {
-                                let mut s = state.lock().await;
+                                let mut s = state_clone.lock().await;
                                 if let Err(e) = s.report_position().await {
                                     eprintln!("Position report error: {}", e);
                                 }
@@ -392,7 +390,6 @@ async fn simconnect_poll_loop(app: tauri::AppHandle, state: Arc<Mutex<SimState>>
     })
     .await;
 
-    // Update state based on result
     let mut s = state.lock().await;
     s.connected = false;
     match result {

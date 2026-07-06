@@ -4,7 +4,6 @@ mod simconnect_bridge;
 
 use simconnect_bridge::SimState;
 use std::sync::Arc;
-use tauri::Manager;
 use tokio::sync::Mutex;
 
 #[tauri::command]
