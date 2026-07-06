@@ -230,12 +230,13 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
   }
 
   async function fetchData() {
+    if (!currentUserId) { setLoading(false); return; }
     const [acarsRes, bookingsRes, acRes, paxRes, profilesRes] = await Promise.all([
-      supabase.from('acars_flights').select('*').is('ended_at', null).order('created_at', { ascending: false }),
-      supabase.from('flight_bookings').select('*').in('status', ['booked', 'in_progress']).order('created_at', { ascending: false }),
+      supabase.from('acars_flights').select('*').eq('user_id', currentUserId).is('ended_at', null).order('created_at', { ascending: false }),
+      supabase.from('flight_bookings').select('*').eq('user_id', currentUserId).in('status', ['booked', 'in_progress']).order('created_at', { ascending: false }),
       supabase.from('aircraft').select('*'),
       supabase.from('pax_pools').select('*').eq('status', 'in_transit'),
-      supabase.from('profiles').select('id, display_name'),
+      supabase.from('profiles').select('id, display_name').eq('id', currentUserId),
     ]);
 
     if (acarsRes.data) setAcarsFlights(acarsRes.data);
@@ -745,7 +746,7 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
           <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-700 flex items-center gap-2">
               <Radar className="w-4 h-4 text-emerald-400" />
-              <h3 className="text-white font-semibold text-sm">Active Flights</h3>
+              <h3 className="text-white font-semibold text-sm">My Active Flights</h3>
               <button onClick={fetchData} className="ml-auto p-1 text-slate-400 hover:text-white rounded transition-colors">
                 <RefreshCw className="w-3.5 h-3.5" />
               </button>
