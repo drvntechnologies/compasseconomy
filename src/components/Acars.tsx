@@ -79,11 +79,26 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
     if (!isTauriApp) return;
     let unlistenTelemetry: (() => void) | null = null;
     let statusInterval: number | null = null;
+    let telemetryInterval: number | null = null;
 
     (async () => {
       unlistenTelemetry = await listenEvent<SimTelemetry>('simconnect-telemetry', (payload) => {
         setLiveTelemetry(payload);
       });
+
+      // Poll telemetry every 1s as fallback in case events aren't received
+      const pollTelemetry = async () => {
+        const raw = await invokeCommand<string>('get_current_telemetry');
+        if (raw) {
+          try {
+            const data = JSON.parse(raw) as SimTelemetry;
+            if (data.latitude !== 0 || data.longitude !== 0) {
+              setLiveTelemetry(data);
+            }
+          } catch {}
+        }
+      };
+      telemetryInterval = window.setInterval(pollTelemetry, 1000);
 
       const pollStatus = async () => {
         const raw = await invokeCommand<string>('get_simconnect_status');
@@ -98,6 +113,7 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
     return () => {
       unlistenTelemetry?.();
       if (statusInterval) clearInterval(statusInterval);
+      if (telemetryInterval) clearInterval(telemetryInterval);
     };
   }, [isTauriApp]);
 
