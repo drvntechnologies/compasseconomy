@@ -461,12 +461,19 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
       if (selAc.is_freighter) {
         cargoCapacityKg = selAc.max_cargo_kg;
       } else if (selAc.mtow_kg && selAc.oew_kg) {
-        // Belly cargo: MTOW - OEW - pax weight - estimated fuel (30% of MTOW-OEW as fuel reserve)
+        // Use route duration to estimate fuel more accurately
+        const route = routes.find(r => r.flight_number === flightNumber);
+        const durationMin = route?.duration_minutes || 180;
+        // Fuel fraction scales with flight length: ~25% for 1hr, up to ~55% for 14hr
+        const fuelFraction = Math.min(0.55, 0.20 + (durationMin / 60) * 0.03);
+        const usefulLoad = selAc.mtow_kg - selAc.oew_kg;
+        const fuelEstimate = usefulLoad * fuelFraction;
         const paxWeight = actualPax * avgPaxWeightKg;
-        const fuelEstimate = (selAc.mtow_kg - selAc.oew_kg) * 0.3;
+        // Apply 5% safety margin so SimBrief doesn't hit MTOW
+        const safetyMargin = usefulLoad * 0.05;
         cargoCapacityKg = Math.max(0, Math.min(
           selAc.max_cargo_kg,
-          selAc.mtow_kg - selAc.oew_kg - paxWeight - fuelEstimate
+          selAc.mtow_kg - selAc.oew_kg - paxWeight - fuelEstimate - safetyMargin
         ));
       } else {
         cargoCapacityKg = selAc.max_cargo_kg;
@@ -822,6 +829,12 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
       pax_count: booking.pax_count,
     });
 
+    // Close any associated ACARS flight record
+    await supabase.from('acars_flights').update({
+      ended_at: new Date().toISOString(),
+      phase: 'parked',
+    }).eq('booking_id', bookingId).is('ended_at', null);
+
     setCompleting(null);
     setEngineHoursMap(prev => { const m = { ...prev }; delete m[bookingId]; return m; });
     fetchBookings();
@@ -878,6 +891,11 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
       assigned_booking_id: null,
       occupied_since: null,
     }).eq('assigned_booking_id', bookingId);
+
+    // Close any associated ACARS flight record
+    await supabase.from('acars_flights').update({
+      ended_at: new Date().toISOString(),
+    }).eq('booking_id', bookingId).is('ended_at', null);
 
     await supabase.from('flight_bookings').update({ status: 'cancelled' }).eq('id', bookingId);
     setCompleting(null);

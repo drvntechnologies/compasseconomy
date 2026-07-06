@@ -1511,6 +1511,10 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
           destination={selectedBooking.arrival_icao}
           aircraftIcao={getSimBriefType(aircraftMap[selectedBooking.aircraft_id].aircraft_type)}
           pax={selectedBooking.pax_count}
+          cargoKg={selectedBooking.cargo_kg}
+          oewKg={aircraftMap[selectedBooking.aircraft_id].oew_kg}
+          mtowKg={aircraftMap[selectedBooking.aircraft_id].mtow_kg}
+          mlwKg={aircraftMap[selectedBooking.aircraft_id].mlw_kg}
           onClose={() => setSimbriefOpen(false)}
         />
       )}

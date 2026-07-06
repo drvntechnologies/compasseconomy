@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { X, ExternalLink, FileText, AlertTriangle } from 'lucide-react';
+import { getIsTauri } from '../lib/tauri-bridge';
 
 interface SimBriefModalProps {
   callsign: string;
@@ -193,17 +194,17 @@ export function buildSimBriefUrl(params: {
     pax: String(params.pax),
   };
 
-  // Pass cargo weight in thousands of kg (SimBrief cargo param format)
+  // Pass cargo weight in kg (matches units=KGS)
   if (params.cargoKg && params.cargoKg > 0) {
-    queryObj.cargo = (params.cargoKg / 1000).toFixed(1);
+    queryObj.cargo = String(Math.round(params.cargoKg));
   }
 
-  // Pass aircraft weight limits via acdata JSON so SimBrief validates MTOW
+  // Pass aircraft weight limits so SimBrief validates MTOW (in kg to match units)
   if (params.oewKg || params.mtowKg || params.mlwKg) {
     const acdata: Record<string, number> = {};
-    if (params.oewKg) acdata.oew = params.oewKg / 1000;
-    if (params.mtowKg) acdata.mtow = params.mtowKg / 1000;
-    if (params.mlwKg) acdata.mlw = params.mlwKg / 1000;
+    if (params.oewKg) acdata.oew = Math.round(params.oewKg);
+    if (params.mtowKg) acdata.mtow = Math.round(params.mtowKg);
+    if (params.mlwKg) acdata.mlw = Math.round(params.mlwKg);
     queryObj.acdata = JSON.stringify(acdata);
   }
 
@@ -259,16 +260,25 @@ export default function SimBriefModal({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <a
-              href={simbriefUrl}
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              onClick={async () => {
+                if (getIsTauri()) {
+                  try {
+                    const { open } = await import('@tauri-apps/plugin-shell');
+                    await open(simbriefUrl);
+                  } catch {
+                    window.open(simbriefUrl, '_blank');
+                  }
+                } else {
+                  window.open(simbriefUrl, '_blank');
+                }
+              }}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-400 hover:text-white bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
-              title="Open in new tab"
+              title="Open in default browser"
             >
               <ExternalLink className="w-3.5 h-3.5" />
               Open Externally
-            </a>
+            </button>
             <button
               onClick={onClose}
               className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
