@@ -15,7 +15,7 @@ reqwest = { version = "0.12", features = ["json"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 [target.'cfg(windows)'.dependencies]
-simconnect-sdk = { version = "0.4", features = ["derive"] }
+simconnect-sdk = { version = "0.2", features = ["derive"] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
