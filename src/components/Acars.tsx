@@ -10,7 +10,8 @@ import SimBriefModal, { getSimBriefType } from './SimBriefModal';
 import {
   Radar, AlertTriangle, Plane, Play, Square, ChevronRight, Users, MapPin,
   ArrowRight, Clock, Gauge, Compass, TrendingUp, TrendingDown, Fuel, RefreshCw,
-  Radio, ClipboardList, Check, ChevronLeft, RotateCcw, DoorOpen, Wifi, WifiOff, FileText
+  Radio, ClipboardList, Check, ChevronLeft, RotateCcw, DoorOpen, Wifi, WifiOff, FileText,
+  CheckCircle, Timer
 } from 'lucide-react';
 
 interface AcarsProps {
@@ -36,7 +37,7 @@ const PHASE_COLORS: Record<FlightPhase, string> = {
   parked: 'bg-slate-500/20 text-slate-300',
 };
 
-function Acars({ currentUserId, simbriefId }: AcarsProps) {
+function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
   const [acarsFlights, setAcarsFlights] = useState<AcarsFlight[]>([]);
   const [bookings, setBookings] = useState<FlightBooking[]>([]);
   const [aircraft, setAircraft] = useState<Aircraft[]>([]);
@@ -50,6 +51,12 @@ function Acars({ currentUserId, simbriefId }: AcarsProps) {
   const [checkedItems, setCheckedItems] = useState<Record<string, Set<number>>>({}); // sectionTitle -> set of checked indices
   const [assignedGate, setAssignedGate] = useState<Gate | null>(null);
   const [gateAssigning, setGateAssigning] = useState(false);
+
+  // Flight completion state
+  const [engineHours, setEngineHours] = useState('');
+  const [completingFlight, setCompletingFlight] = useState(false);
+  const [completionSuccess, setCompletionSuccess] = useState<string | null>(null);
+  const [completionError, setCompletionError] = useState<string | null>(null);
 
   // SimConnect state
   const [isTauriApp] = useState(() => getIsTauri());
@@ -297,6 +304,221 @@ function Acars({ currentUserId, simbriefId }: AcarsProps) {
   function getCompatibleGateTypes(aircraftSize: SizeCategory): SizeCategory[] {
     const idx = SIZE_HIERARCHY.indexOf(aircraftSize);
     return SIZE_HIERARCHY.slice(idx);
+  }
+
+  async function completeFlight(acars: AcarsFlight) {
+    const hours = parseFloat(engineHours);
+    if (!engineHours || isNaN(hours) || hours <= 0) {
+      setCompletionError('Enter valid engine hours (> 0)');
+      return;
+    }
+
+    setCompletingFlight(true);
+    setCompletionError(null);
+    setCompletionSuccess(null);
+
+    const booking = bookings.find(b => b.id === acars.booking_id);
+    if (!booking) { setCompletingFlight(false); setCompletionError('Booking not found'); return; }
+
+    const arrivalIcao = booking.arrival_icao;
+
+    // Process pax pools
+    const { data: pools } = await supabase
+      .from('pax_pools')
+      .select('*')
+      .eq('booking_id', booking.id);
+
+    let arrivedPaxCount = 0;
+    if (pools) {
+      for (const pool of pools) {
+        if (pool.destination_icao === arrivalIcao) {
+          arrivedPaxCount += pool.pax_count;
+          await supabase.from('pax_pools').update({
+            current_airport_icao: arrivalIcao,
+            status: 'arrived',
+            connections_remaining: 0,
+            booking_id: null,
+          }).eq('id', pool.id);
+        } else {
+          await supabase.from('pax_pools').update({
+            current_airport_icao: arrivalIcao,
+            status: 'layover',
+            connections_remaining: Math.max(0, pool.connections_remaining - 1),
+            booking_id: null,
+          }).eq('id', pool.id);
+        }
+      }
+    }
+
+    // Process cargo pools
+    const { data: cargoPoolsForBooking } = await supabase
+      .from('cargo_pools')
+      .select('*')
+      .eq('booking_id', booking.id);
+
+    let arrivedCargoKg = 0;
+    if (cargoPoolsForBooking) {
+      for (const cargo of cargoPoolsForBooking) {
+        if (cargo.destination_icao === arrivalIcao) {
+          arrivedCargoKg += cargo.weight_kg;
+          await supabase.from('cargo_pools').update({
+            current_airport_icao: arrivalIcao,
+            status: 'arrived',
+            connections_remaining: 0,
+            booking_id: null,
+          }).eq('id', cargo.id);
+        } else {
+          await supabase.from('cargo_pools').update({
+            current_airport_icao: arrivalIcao,
+            status: 'layover',
+            connections_remaining: Math.max(0, cargo.connections_remaining - 1),
+            booking_id: null,
+          }).eq('id', cargo.id);
+        }
+      }
+    }
+
+    // Mark booking completed
+    await supabase.from('flight_bookings').update({
+      status: 'completed',
+      engine_hours: hours,
+    }).eq('id', booking.id);
+
+    // Move aircraft to arrival and release
+    let gateFeeTotal = 0;
+    if (booking.aircraft_id) {
+      await supabase.from('aircraft').update({
+        current_airport_icao: arrivalIcao,
+        status: 'available',
+        reserved_by_booking_id: null,
+      }).eq('id', booking.aircraft_id);
+
+      // Release departure gates
+      const { data: occupiedGates } = await supabase
+        .from('gates')
+        .select('*')
+        .eq('assigned_aircraft_id', booking.aircraft_id);
+
+      const arrivalGate = (occupiedGates || []).find(
+        g => g.assigned_booking_id === booking.id && g.airport_icao === arrivalIcao
+      );
+
+      for (const gate of (occupiedGates || [])) {
+        if (gate.id === arrivalGate?.id) continue;
+
+        if (gate.lease_type === 'per_hour' && gate.hourly_price && gate.occupied_since) {
+          const billingStart = gate.last_billed_at || gate.occupied_since;
+          const now = new Date();
+          const minutesParked = (now.getTime() - new Date(billingStart).getTime()) / 60000;
+          const tenMinBlocks = Math.ceil(minutesParked / 10);
+          const fee = tenMinBlocks * (gate.hourly_price / 6);
+          if (fee > 0) {
+            gateFeeTotal += fee;
+            await supabase.from('financial_transactions').insert({
+              type: 'gate_fee',
+              amount: -fee,
+              description: `Gate ${gate.gate_number} at ${gate.airport_icao}: ${tenMinBlocks * 10}min @ $${gate.hourly_price}/hr`,
+              reference_id: gate.id,
+            });
+          }
+        }
+        await supabase.from('gates').update({
+          status: 'open',
+          assigned_aircraft_id: null,
+          assigned_booking_id: null,
+          occupied_since: null,
+          last_billed_at: null,
+        }).eq('id', gate.id);
+      }
+
+      if (arrivalGate) {
+        await supabase.from('gates').update({
+          assigned_booking_id: null,
+          occupied_since: new Date().toISOString(),
+        }).eq('id', arrivalGate.id);
+      }
+    }
+
+    // Revenue calculations
+    const { data: financials } = await supabase
+      .from('airline_financials')
+      .select('*')
+      .eq('id', 1)
+      .maybeSingle();
+
+    let balanceChange = -gateFeeTotal;
+
+    if (arrivedPaxCount > 0) {
+      const route = routes.find(r => r.flight_number === booking.flight_number);
+      const ticketPrice = route?.ticket_price_usd ?? 250;
+      const revenue = arrivedPaxCount * ticketPrice;
+      balanceChange += revenue;
+
+      await supabase.from('financial_transactions').insert({
+        type: 'ticket_revenue',
+        amount: revenue,
+        description: `CPZ${booking.flight_number} ${booking.departure_icao}->${arrivalIcao}: ${arrivedPaxCount} PAX @ $${ticketPrice}`,
+        reference_id: booking.id,
+      });
+    }
+
+    if (arrivedCargoKg > 0) {
+      const route = routes.find(r => r.flight_number === booking.flight_number);
+      const cargoRate = route?.cargo_price_per_kg ?? 0.45;
+      const cargoRevenue = arrivedCargoKg * cargoRate;
+      balanceChange += cargoRevenue;
+
+      await supabase.from('financial_transactions').insert({
+        type: 'cargo_revenue',
+        amount: cargoRevenue,
+        description: `CPZ${booking.flight_number} ${booking.departure_icao}->${arrivalIcao}: ${(arrivedCargoKg / 1000).toFixed(1)}t cargo @ $${cargoRate}/kg`,
+        reference_id: booking.id,
+      });
+    }
+
+    const ac = booking.aircraft_id ? aircraftMap[booking.aircraft_id] : null;
+    if (ac && ac.hourly_cost_usd > 0) {
+      const engineCost = hours * ac.hourly_cost_usd;
+      balanceChange -= engineCost;
+
+      await supabase.from('financial_transactions').insert({
+        type: 'engine_cost',
+        amount: -engineCost,
+        description: `CPZ${booking.flight_number} ${ac.tail_number}: ${hours.toFixed(1)}hrs @ $${ac.hourly_cost_usd}/hr`,
+        reference_id: booking.id,
+      });
+    }
+
+    if (financials && balanceChange !== 0) {
+      await supabase.from('airline_financials').update({
+        balance_usd: financials.balance_usd + balanceChange,
+        updated_at: new Date().toISOString(),
+      }).eq('id', 1);
+    }
+
+    // Log the flight
+    await supabase.from('flight_logs').insert({
+      flight_number: booking.flight_number,
+      departure_icao: booking.departure_icao,
+      arrival_icao: booking.arrival_icao,
+      pax_count: booking.pax_count,
+      user_id: booking.user_id,
+    });
+
+    // End ACARS tracking
+    await supabase.from('acars_flights').update({
+      phase: 'parked',
+      ended_at: new Date().toISOString(),
+      ground_speed_kts: 0,
+      altitude_ft: 0,
+      vs_fpm: 0,
+    }).eq('id', acars.id);
+
+    setCompletingFlight(false);
+    setCompletionSuccess(`Flight completed! +$${Math.round(balanceChange).toLocaleString()} revenue`);
+    setEngineHours('');
+    setSelectedFlightId(null);
+    fetchData();
   }
 
   const aircraftMap = useMemo(() => {
@@ -1228,6 +1450,89 @@ function Acars({ currentUserId, simbriefId }: AcarsProps) {
                     <p className="text-slate-500 text-[10px] mt-1">Check gate availability at {selectedBooking.arrival_icao}</p>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Complete Flight Card - shows when parked (engines off) */}
+          {selectedAcars && selectedBooking && selectedAcars.phase === 'parked' && !selectedAcars.ended_at && (
+            <div className="bg-slate-800/50 border border-sky-500/30 rounded-xl overflow-hidden animate-in">
+              <div className="px-4 py-3 border-b border-sky-500/20 bg-sky-500/5 flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-sky-400" />
+                <h3 className="text-sky-300 font-semibold text-sm">Complete Flight</h3>
+              </div>
+              <div className="p-4 space-y-3">
+                <p className="text-xs text-slate-400">
+                  Engines off at {selectedBooking.arrival_icao}. Enter engine hours to finalize the flight, process passengers and cargo, and record revenue.
+                </p>
+
+                <div>
+                  <label className="block text-[10px] text-slate-500 uppercase font-medium mb-1.5">Engine Hours</label>
+                  <div className="flex items-center gap-2">
+                    <Timer className="w-4 h-4 text-slate-400 shrink-0" />
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0.1"
+                      value={engineHours}
+                      onChange={e => setEngineHours(e.target.value)}
+                      placeholder="e.g. 2.5"
+                      className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm font-mono focus:ring-2 focus:ring-sky-500/40 focus:border-sky-500 transition-all"
+                    />
+                  </div>
+                </div>
+
+                {completionError && (
+                  <div className="flex items-center gap-2 text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg p-2.5">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    {completionError}
+                  </div>
+                )}
+
+                <button
+                  onClick={() => completeFlight(selectedAcars)}
+                  disabled={completingFlight || !engineHours}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-sky-600 hover:bg-sky-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold text-sm rounded-lg transition-all shadow-lg shadow-sky-600/20"
+                >
+                  {completingFlight ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Complete Flight
+                    </>
+                  )}
+                </button>
+
+                <div className="bg-slate-900/50 rounded-lg p-2.5 space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500">PAX delivered</span>
+                    <span className="text-white font-mono">{selectedBooking.pax_count}</span>
+                  </div>
+                  {selectedBooking.cargo_kg && selectedBooking.cargo_kg > 0 && (
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500">Cargo on board</span>
+                      <span className="text-teal-400 font-mono">{(selectedBooking.cargo_kg / 1000).toFixed(1)}t</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500">Route</span>
+                    <span className="text-white font-mono">{selectedBooking.departure_icao} -&gt; {selectedBooking.arrival_icao}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Completion success toast */}
+          {completionSuccess && (
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 animate-in">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-emerald-400" />
+                <div>
+                  <p className="text-emerald-300 text-sm font-semibold">Flight Completed</p>
+                  <p className="text-emerald-400/70 text-xs mt-0.5">{completionSuccess}</p>
+                </div>
               </div>
             </div>
           )}
