@@ -1,4 +1,8 @@
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+#[cfg(windows)]
 use tauri::Emitter;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,6 +88,7 @@ pub struct SimState {
     supabase_token: Option<String>,
     last_report_at: Option<String>,
     error: Option<String>,
+    poll_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl SimState {
@@ -99,6 +104,7 @@ impl SimState {
             supabase_token: None,
             last_report_at: None,
             error: None,
+            poll_handle: None,
         }
     }
 
@@ -131,13 +137,11 @@ impl SimState {
         self.supabase_token = None;
     }
 
-    /// Detect flight phase from current telemetry
     pub fn detect_phase(&mut self) {
         let t = &self.current_telemetry;
 
         let new_phase = if t.on_ground {
             if self.was_airborne {
-                // We were flying, now on ground = landed
                 if t.ground_speed_kts < 5 {
                     if let Some(timer) = self.parked_timer {
                         if timer.elapsed().as_secs() >= 30 {
@@ -154,7 +158,6 @@ impl SimState {
                     FlightPhase::TaxiIn
                 }
             } else {
-                // Never been airborne
                 if t.ground_speed_kts > 5 {
                     FlightPhase::TaxiOut
                 } else {
@@ -162,7 +165,6 @@ impl SimState {
                 }
             }
         } else {
-            // Airborne
             self.was_airborne = true;
             self.parked_timer = None;
 
@@ -179,7 +181,6 @@ impl SimState {
             } else if t.altitude_ft > 10000 && t.vs_fpm.abs() < 300 {
                 FlightPhase::Cruise
             } else {
-                // Maintain current phase if no clear transition
                 self.current_phase.clone()
             }
         };
@@ -187,16 +188,27 @@ impl SimState {
         self.current_phase = new_phase;
     }
 
-    /// Connect to SimConnect (Windows only - stubbed on other platforms)
-    pub fn connect(&mut self, _app: &tauri::AppHandle) -> Result<(), String> {
+    pub fn connect(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
         #[cfg(windows)]
         {
+            if self.connected {
+                return Ok(());
+            }
+
+            if let Some(handle) = self.poll_handle.take() {
+                handle.abort();
+            }
+
             self.connected = true;
             self.error = None;
-            // On Windows, the actual SimConnect connection loop would be
-            // spawned here using simconnect-sdk. The loop polls every 2 seconds,
-            // updates self.current_telemetry, calls detect_phase(), and emits
-            // "simconnect-telemetry" events to the frontend.
+
+            let app_handle = app.clone();
+            let state = app.state::<Arc<Mutex<SimState>>>().inner().clone();
+            let handle = tokio::spawn(async move {
+                simconnect_poll_loop(app_handle, state).await;
+            });
+            self.poll_handle = Some(handle);
+
             Ok(())
         }
         #[cfg(not(windows))]
@@ -209,30 +221,11 @@ impl SimState {
     pub fn disconnect(&mut self) {
         self.connected = false;
         self.tracking = false;
+        if let Some(handle) = self.poll_handle.take() {
+            handle.abort();
+        }
     }
 
-    /// Called every 2 seconds when connected - updates telemetry from SimConnect
-    #[cfg(windows)]
-    pub fn poll_simconnect(&mut self, app: &tauri::AppHandle) {
-        // In the real implementation, this reads SimVars via simconnect-sdk:
-        // - PLANE LATITUDE / PLANE LONGITUDE
-        // - PLANE ALTITUDE (feet)
-        // - GROUND VELOCITY (knots)
-        // - PLANE HEADING DEGREES MAGNETIC
-        // - VERTICAL SPEED (ft/min)
-        // - FUEL TOTAL QUANTITY WEIGHT (pounds)
-        // - SIM ON GROUND (boolean)
-        // - SIMULATION RATE
-        // - GEAR HANDLE POSITION
-
-        self.detect_phase();
-
-        // Emit telemetry event to frontend
-        let _ = app.emit("simconnect-telemetry", &self.current_telemetry);
-        let _ = app.emit("simconnect-phase", self.current_phase.as_str());
-    }
-
-    /// Called every 120 seconds to report position to Supabase
     pub async fn report_position(&mut self) -> Result<(), String> {
         if !self.tracking {
             return Ok(());
@@ -274,5 +267,141 @@ impl SimState {
             let body = resp.text().await.unwrap_or_default();
             Err(format!("Position report failed: {}", body))
         }
+    }
+}
+
+#[cfg(windows)]
+use simconnect_sdk::{Notification, SimConnect, SimConnectObject};
+
+#[cfg(windows)]
+#[derive(Debug, Clone, SimConnectObject)]
+#[simconnect(period = "second")]
+#[allow(dead_code)]
+struct AircraftData {
+    #[simconnect(name = "PLANE LATITUDE", unit = "degrees")]
+    latitude: f64,
+    #[simconnect(name = "PLANE LONGITUDE", unit = "degrees")]
+    longitude: f64,
+    #[simconnect(name = "PLANE ALTITUDE", unit = "feet")]
+    altitude: f64,
+    #[simconnect(name = "GROUND VELOCITY", unit = "knots")]
+    ground_speed: f64,
+    #[simconnect(name = "PLANE HEADING DEGREES MAGNETIC", unit = "degrees")]
+    heading: f64,
+    #[simconnect(name = "VERTICAL SPEED", unit = "feet per minute")]
+    vertical_speed: f64,
+    #[simconnect(name = "FUEL TOTAL QUANTITY WEIGHT", unit = "pounds")]
+    fuel_weight: f64,
+    #[simconnect(name = "SIM ON GROUND")]
+    on_ground: bool,
+    #[simconnect(name = "SIMULATION RATE", unit = "number")]
+    sim_rate: f64,
+    #[simconnect(name = "GEAR HANDLE POSITION")]
+    gear_handle: bool,
+}
+
+#[cfg(windows)]
+async fn simconnect_poll_loop(app: tauri::AppHandle, state: Arc<Mutex<SimState>>) {
+    use std::time::{Duration, Instant};
+
+    // SimConnect is synchronous -- run in a blocking thread
+    let result = tokio::task::spawn_blocking(move || {
+        let mut client = match SimConnect::new("CompassAtlantic-ACARS") {
+            Ok(c) => c,
+            Err(e) => {
+                return Err(format!("SimConnect open failed: {}", e));
+            }
+        };
+
+        let mut registered = false;
+        let mut last_report = Instant::now();
+        let report_interval = Duration::from_secs(120);
+
+        loop {
+            // Check connected flag
+            let still_connected = {
+                let rt = tokio::runtime::Handle::current();
+                rt.block_on(async { state.lock().await.connected })
+            };
+            if !still_connected {
+                break;
+            }
+
+            match client.get_next_dispatch() {
+                Ok(Some(Notification::Open)) => {
+                    if let Err(e) = client.register_object::<AircraftData>() {
+                        return Err(format!("Failed to register data: {}", e));
+                    }
+                    registered = true;
+                }
+                Ok(Some(Notification::Object(data))) => {
+                    if !registered {
+                        continue;
+                    }
+                    if let Ok(ad) = AircraftData::try_from(&data) {
+                        let telemetry = Telemetry {
+                            latitude: ad.latitude,
+                            longitude: ad.longitude,
+                            altitude_ft: ad.altitude as i32,
+                            ground_speed_kts: ad.ground_speed as i32,
+                            heading_deg: ad.heading as i32,
+                            vs_fpm: ad.vertical_speed as i32,
+                            fuel_lbs: ad.fuel_weight,
+                            on_ground: ad.on_ground,
+                            sim_rate: ad.sim_rate,
+                            gear_handle: ad.gear_handle,
+                        };
+
+                        let rt = tokio::runtime::Handle::current();
+                        let phase_str = rt.block_on(async {
+                            let mut s = state.lock().await;
+                            s.current_telemetry = telemetry.clone();
+                            s.detect_phase();
+                            s.current_phase.as_str().to_string()
+                        });
+
+                        let _ = app.emit("simconnect-telemetry", &telemetry);
+                        let _ = app.emit("simconnect-phase", &phase_str);
+
+                        // Periodic position report to Supabase
+                        if last_report.elapsed() >= report_interval {
+                            let rt = tokio::runtime::Handle::current();
+                            rt.block_on(async {
+                                let mut s = state.lock().await;
+                                if let Err(e) = s.report_position().await {
+                                    eprintln!("Position report error: {}", e);
+                                }
+                            });
+                            last_report = Instant::now();
+                        }
+                    }
+                }
+                Ok(Some(Notification::Quit)) => {
+                    return Err("MSFS closed the connection".to_string());
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    return Err(format!("SimConnect error: {}", e));
+                }
+            }
+
+            std::thread::sleep(Duration::from_millis(16));
+        }
+
+        Ok(())
+    })
+    .await;
+
+    // Update state based on result
+    let mut s = state.lock().await;
+    s.connected = false;
+    match result {
+        Ok(Err(e)) => {
+            s.error = Some(e);
+        }
+        Err(e) => {
+            s.error = Some(format!("Poll task panicked: {}", e));
+        }
+        _ => {}
     }
 }
