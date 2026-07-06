@@ -98,11 +98,6 @@ Deno.serve(async (req: Request) => {
       flightUpdate.phase = phase;
     }
 
-    // Auto-end flight if phase is parked
-    if (phase === "parked") {
-      flightUpdate.ended_at = new Date().toISOString();
-    }
-
     const { error: updateError } = await supabase
       .from("acars_flights")
       .update(flightUpdate)
@@ -141,7 +136,6 @@ Deno.serve(async (req: Request) => {
         success: true,
         flight_id: activeFlight.id,
         phase: phase ?? activeFlight.phase,
-        ended: phase === "parked",
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

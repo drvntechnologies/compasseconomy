@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { getIsTauri, invokeCommand, listenEvent } from '../lib/tauri-bridge';
 import type { SimTelemetry, SimConnectStatus } from '../lib/tauri-bridge';
@@ -46,14 +46,12 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
   const [loading, setLoading] = useState(true);
   const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
   const [startingTracking, setStartingTracking] = useState<string | null>(null);
-  const [advancingPhase, setAdvancingPhase] = useState<string | null>(null);
   const [checklistTab, setChecklistTab] = useState(0);
   const [checkedItems, setCheckedItems] = useState<Record<string, Set<number>>>({}); // sectionTitle -> set of checked indices
   const [assignedGate, setAssignedGate] = useState<Gate | null>(null);
   const [gateAssigning, setGateAssigning] = useState(false);
 
   // Flight completion state
-  const [engineHours, setEngineHours] = useState('');
   const [completingFlight, setCompletingFlight] = useState(false);
   const [completionSuccess, setCompletionSuccess] = useState<string | null>(null);
   const [completionError, setCompletionError] = useState<string | null>(null);
@@ -138,7 +136,7 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
 
   async function fetchData() {
     const [acarsRes, bookingsRes, acRes, paxRes, profilesRes] = await Promise.all([
-      supabase.from('acars_flights').select('*').order('created_at', { ascending: false }),
+      supabase.from('acars_flights').select('*').is('ended_at', null).order('created_at', { ascending: false }),
       supabase.from('flight_bookings').select('*').in('status', ['booked', 'in_progress']).order('created_at', { ascending: false }),
       supabase.from('aircraft').select('*'),
       supabase.from('pax_pools').select('*').eq('status', 'in_transit'),
@@ -177,69 +175,18 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
     fetchData();
   }
 
-  async function advancePhase(acars: AcarsFlight) {
-    const currentIdx = FLIGHT_PHASES.indexOf(acars.phase);
-    if (currentIdx >= FLIGHT_PHASES.length - 1) return;
+  // Track previously seen phases to detect transitions (for gate assignment on landing)
+  const prevPhasesRef = useRef<Record<string, FlightPhase>>({});
 
-    setAdvancingPhase(acars.id);
-    const nextPhase = FLIGHT_PHASES[currentIdx + 1];
-
-    const updates: Partial<AcarsFlight> & { phase: FlightPhase; last_report_at: string; ended_at?: string } = {
-      phase: nextPhase,
-      last_report_at: new Date().toISOString(),
-    };
-
-    // Simulate telemetry based on phase
-    if (nextPhase === 'taxi_out' || nextPhase === 'taxi_in') {
-      updates.ground_speed_kts = 15 + Math.floor(Math.random() * 10);
-      updates.altitude_ft = 0;
-      updates.vs_fpm = 0;
-    } else if (nextPhase === 'takeoff') {
-      updates.ground_speed_kts = 140 + Math.floor(Math.random() * 30);
-      updates.altitude_ft = 500 + Math.floor(Math.random() * 500);
-      updates.vs_fpm = 2000 + Math.floor(Math.random() * 1000);
-    } else if (nextPhase === 'climb') {
-      updates.ground_speed_kts = 280 + Math.floor(Math.random() * 40);
-      updates.altitude_ft = 10000 + Math.floor(Math.random() * 15000);
-      updates.vs_fpm = 1500 + Math.floor(Math.random() * 1000);
-    } else if (nextPhase === 'cruise') {
-      updates.ground_speed_kts = 420 + Math.floor(Math.random() * 80);
-      updates.altitude_ft = 30000 + Math.floor(Math.random() * 11000);
-      updates.vs_fpm = 0;
-    } else if (nextPhase === 'descent') {
-      updates.ground_speed_kts = 320 + Math.floor(Math.random() * 60);
-      updates.altitude_ft = 15000 + Math.floor(Math.random() * 10000);
-      updates.vs_fpm = -(1000 + Math.floor(Math.random() * 1500));
-    } else if (nextPhase === 'approach') {
-      updates.ground_speed_kts = 160 + Math.floor(Math.random() * 40);
-      updates.altitude_ft = 2000 + Math.floor(Math.random() * 3000);
-      updates.vs_fpm = -(500 + Math.floor(Math.random() * 500));
-    } else if (nextPhase === 'landed') {
-      updates.ground_speed_kts = 60 + Math.floor(Math.random() * 40);
-      updates.altitude_ft = 0;
-      updates.vs_fpm = 0;
-    } else if (nextPhase === 'parked') {
-      updates.ground_speed_kts = 0;
-      updates.altitude_ft = 0;
-      updates.vs_fpm = 0;
-      updates.ended_at = new Date().toISOString();
+  useEffect(() => {
+    for (const acars of acarsFlights) {
+      const prevPhase = prevPhasesRef.current[acars.id];
+      if (prevPhase && prevPhase !== 'landed' && acars.phase === 'landed') {
+        autoAssignGate(acars);
+      }
+      prevPhasesRef.current[acars.id] = acars.phase;
     }
-
-    if (nextPhase !== 'preflight' && nextPhase !== 'parked') {
-      updates.heading_deg = Math.floor(Math.random() * 360);
-      updates.fuel_lbs = 5000 + Math.floor(Math.random() * 30000);
-    }
-
-    await supabase.from('acars_flights').update(updates).eq('id', acars.id);
-
-    // Auto-assign gate on landing
-    if (nextPhase === 'landed') {
-      await autoAssignGate(acars);
-    }
-
-    setAdvancingPhase(null);
-    fetchData();
-  }
+  }, [acarsFlights]);
 
   async function stopTracking(acars: AcarsFlight) {
     await supabase.from('acars_flights').update({
@@ -307,9 +254,13 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
   }
 
   async function completeFlight(acars: AcarsFlight) {
-    const hours = parseFloat(engineHours);
-    if (!engineHours || isNaN(hours) || hours <= 0) {
-      setCompletionError('Enter valid engine hours (> 0)');
+    // Auto-calculate engine hours from ACARS flight duration
+    const startedAt = new Date(acars.started_at);
+    const now = new Date();
+    const hours = Math.round(((now.getTime() - startedAt.getTime()) / 3600000) * 10) / 10;
+
+    if (hours <= 0) {
+      setCompletionError('Flight duration too short to log');
       return;
     }
 
@@ -515,8 +466,7 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
     }).eq('id', acars.id);
 
     setCompletingFlight(false);
-    setCompletionSuccess(`Flight completed! +$${Math.round(balanceChange).toLocaleString()} revenue`);
-    setEngineHours('');
+    setCompletionSuccess(`Flight completed! ${hours.toFixed(1)}hrs logged. Net: $${Math.round(balanceChange).toLocaleString()}`);
     setSelectedFlightId(null);
     fetchData();
   }
@@ -534,9 +484,10 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
   }, [bookings]);
 
   const activeAcars = useMemo(() => acarsFlights.filter(a => !a.ended_at), [acarsFlights]);
+  const activeAcarsBookingIds = useMemo(() => new Set(activeAcars.map(a => a.booking_id)), [activeAcars]);
   const unbookedFlights = useMemo(() =>
-    bookings.filter(b => b.status === 'booked' && b.user_id === currentUserId && !acarsFlights.some(a => a.booking_id === b.id)),
-    [bookings, acarsFlights, currentUserId]
+    bookings.filter(b => b.status === 'booked' && b.user_id === currentUserId && !activeAcarsBookingIds.has(b.id)),
+    [bookings, activeAcars, currentUserId, activeAcarsBookingIds]
   );
 
   const selectedAcars = useMemo(() =>
@@ -914,15 +865,14 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
                     </div>
                   </div>
 
-                  {/* Phase Stepper Controls */}
+                  {/* Phase Indicator */}
                   <div className="px-4 pb-4">
-                    <p className="text-xs text-slate-400 font-medium mb-2">Flight Phase Controls (Dev Sim)</p>
+                    <p className="text-xs text-slate-400 font-medium mb-2">Flight Phases</p>
                     <div className="flex flex-wrap gap-1.5">
                       {FLIGHT_PHASES.map((phase, idx) => {
                         const currentIdx = FLIGHT_PHASES.indexOf(selectedAcars.phase);
                         const isActive = idx === currentIdx;
                         const isPast = idx < currentIdx;
-                        const isNext = idx === currentIdx + 1;
                         return (
                           <span
                             key={phase}
@@ -931,8 +881,6 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
                                 ? 'bg-sky-500 text-white'
                                 : isPast
                                 ? 'bg-emerald-500/20 text-emerald-400'
-                                : isNext
-                                ? 'bg-slate-600 text-slate-200 ring-1 ring-sky-500/50'
                                 : 'bg-slate-700/50 text-slate-500'
                             }`}
                           >
@@ -943,28 +891,12 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
                     </div>
                     <div className="mt-3 flex gap-2">
                       <button
-                        onClick={() => advancePhase(selectedAcars)}
-                        disabled={
-                          advancingPhase === selectedAcars.id ||
-                          FLIGHT_PHASES.indexOf(selectedAcars.phase) >= FLIGHT_PHASES.length - 1
-                        }
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-sky-500 hover:bg-sky-400 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold text-sm rounded-lg transition-all"
-                      >
-                        {advancingPhase === selectedAcars.id ? (
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                          <>
-                            <ChevronRight className="w-4 h-4" />
-                            Advance Phase
-                          </>
-                        )}
-                      </button>
-                      <button
                         onClick={() => stopTracking(selectedAcars)}
-                        className="px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold text-sm rounded-lg transition-all"
-                        title="Stop tracking and release booking"
+                        className="flex items-center gap-2 px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold text-sm rounded-lg transition-all"
+                        title="Cancel and release booking"
                       >
                         <Square className="w-4 h-4" />
+                        Cancel Flight
                       </button>
                     </div>
                   </div>
@@ -1463,23 +1395,18 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
               </div>
               <div className="p-4 space-y-3">
                 <p className="text-xs text-slate-400">
-                  Engines off at {selectedBooking.arrival_icao}. Enter engine hours to finalize the flight, process passengers and cargo, and record revenue.
+                  Engines off at {selectedBooking.arrival_icao}. Complete the flight to process passengers, cargo, and record revenue.
                 </p>
 
-                <div>
-                  <label className="block text-[10px] text-slate-500 uppercase font-medium mb-1.5">Engine Hours</label>
-                  <div className="flex items-center gap-2">
-                    <Timer className="w-4 h-4 text-slate-400 shrink-0" />
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="0.1"
-                      value={engineHours}
-                      onChange={e => setEngineHours(e.target.value)}
-                      placeholder="e.g. 2.5"
-                      className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm font-mono focus:ring-2 focus:ring-sky-500/40 focus:border-sky-500 transition-all"
-                    />
+                {/* Auto-calculated engine hours */}
+                <div className="bg-slate-900/50 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Timer className="w-4 h-4 text-sky-400" />
+                    <span className="text-xs text-slate-400 font-medium">Engine Time (auto-calculated)</span>
                   </div>
+                  <p className="text-white font-mono font-bold text-lg">
+                    {(Math.round(((Date.now() - new Date(selectedAcars.started_at).getTime()) / 3600000) * 10) / 10).toFixed(1)} hrs
+                  </p>
                 </div>
 
                 {completionError && (
@@ -1491,7 +1418,7 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
 
                 <button
                   onClick={() => completeFlight(selectedAcars)}
-                  disabled={completingFlight || !engineHours}
+                  disabled={completingFlight}
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-sky-600 hover:bg-sky-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold text-sm rounded-lg transition-all shadow-lg shadow-sky-600/20"
                 >
                   {completingFlight ? (
