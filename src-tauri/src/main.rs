@@ -17,8 +17,9 @@ async fn start_simconnect(
     app: tauri::AppHandle,
     state: tauri::State<'_, Arc<Mutex<SimState>>>,
 ) -> Result<(), String> {
+    let shared = state.inner().clone();
     let mut sim = state.lock().await;
-    sim.connect(&app).map_err(|e| e.to_string())
+    sim.connect(&app, shared).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

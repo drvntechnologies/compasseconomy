@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 #[cfg(windows)]
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Telemetry {
@@ -188,9 +188,12 @@ impl SimState {
         self.current_phase = new_phase;
     }
 
-    pub fn connect(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
+    pub fn connect(&mut self, _app: &tauri::AppHandle, _shared: Arc<Mutex<SimState>>) -> Result<(), String> {
         #[cfg(windows)]
         {
+            let app = _app;
+            let shared = _shared;
+
             if self.connected {
                 return Ok(());
             }
@@ -203,9 +206,8 @@ impl SimState {
             self.error = None;
 
             let app_handle = app.clone();
-            let state = app.state::<Arc<Mutex<SimState>>>().inner().clone();
             let handle = tokio::spawn(async move {
-                simconnect_poll_loop(app_handle, state).await;
+                simconnect_poll_loop(app_handle, shared).await;
             });
             self.poll_handle = Some(handle);
 
