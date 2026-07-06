@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Airport, Route, PaxPool, FlightLog, Notam } from '../lib/types';
-import { Users, Plane, MapPin, ArrowRight, Clock, CheckCircle, ExternalLink, RefreshCw, TrendingUp, Trophy, DollarSign, AlertTriangle, Info, AlertCircle, Plus, X, Send, Package } from 'lucide-react';
+import { Users, Plane, MapPin, ArrowRight, Clock, CheckCircle, ExternalLink, RefreshCw, TrendingUp, Trophy, DollarSign, AlertTriangle, Info, AlertCircle, Plus, X, Send } from 'lucide-react';
 import AirportDetailModal from './AirportDetailModal';
 import LiveMap from './LiveMap';
 

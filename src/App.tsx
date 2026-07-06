@@ -1,6 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from './lib/supabase';
 import type { Profile, Airport, Route } from './lib/types';
+import { FLIGHT_PHASES } from './lib/types';
+import type { FlightPhase } from './lib/types';
+import type { SimTelemetry, SimConnectStatus } from './lib/tauri-bridge';
+import { getIsTauri, invokeCommand, listenEvent } from './lib/tauri-bridge';
 import AuthPage from './components/AuthPage';
 import AdminPanel from './components/AdminPanel';
 import Dashboard from './components/Dashboard';
@@ -48,6 +52,90 @@ export default function App() {
   const intervalRef = useRef<number | null>(null);
   const [flightOpsOpen, setFlightOpsOpen] = useState(false);
   const [paxOpsOpen, setPaxOpsOpen] = useState(false);
+  const [liveTelemetryForMap, setLiveTelemetryForMap] = useState<{ telemetry: SimTelemetry; phase: string; flightId: string } | null>(null);
+
+  const handleTelemetryUpdate = useCallback((telemetry: SimTelemetry, phase: string, flightId: string) => {
+    setLiveTelemetryForMap({ telemetry, phase, flightId });
+  }, []);
+
+  // App-level telemetry polling so LiveMap gets updates even when ACARS tab isn't active
+  const [appIsTauri] = useState(() => getIsTauri());
+  const [appLiveTelemetry, setAppLiveTelemetry] = useState<SimTelemetry | null>(null);
+  const [appLivePhase, setAppLivePhase] = useState<string | null>(null);
+  const [appActiveFlightId, setAppActiveFlightId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!appIsTauri || !session) return;
+    let telemetryInterval: number | null = null;
+    let statusInterval: number | null = null;
+    let unlistenPhase: (() => void) | null = null;
+
+    (async () => {
+      unlistenPhase = await listenEvent<string>('simconnect-phase', (payload) => {
+        if (FLIGHT_PHASES.includes(payload as FlightPhase)) {
+          setAppLivePhase(payload);
+        }
+      });
+
+      const pollTelemetry = async () => {
+        const raw = await invokeCommand<string>('get_current_telemetry');
+        if (raw) {
+          try {
+            const data = JSON.parse(raw) as SimTelemetry;
+            if (data.latitude !== 0 || data.longitude !== 0) {
+              setAppLiveTelemetry(data);
+            }
+          } catch {}
+        }
+      };
+      telemetryInterval = window.setInterval(pollTelemetry, 2000);
+
+      const pollStatus = async () => {
+        const raw = await invokeCommand<string>('get_simconnect_status');
+        if (raw) {
+          try {
+            const s = JSON.parse(raw) as SimConnectStatus;
+            if (s.phase && FLIGHT_PHASES.includes(s.phase as FlightPhase)) {
+              setAppLivePhase(s.phase);
+            }
+          } catch {}
+        }
+      };
+      statusInterval = window.setInterval(pollStatus, 5000);
+    })();
+
+    return () => {
+      unlistenPhase?.();
+      if (telemetryInterval) clearInterval(telemetryInterval);
+      if (statusInterval) clearInterval(statusInterval);
+    };
+  }, [appIsTauri, session]);
+
+  // Track the current user's active ACARS flight ID for map overlay
+  useEffect(() => {
+    if (!session) return;
+    const fetchActiveId = async () => {
+      const { data } = await supabase
+        .from('acars_flights')
+        .select('id')
+        .eq('user_id', session.user.id)
+        .is('ended_at', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      setAppActiveFlightId(data?.id || null);
+    };
+    fetchActiveId();
+    const interval = setInterval(fetchActiveId, 30000);
+    return () => clearInterval(interval);
+  }, [session]);
+
+  // Derive the combined live telemetry for the map (from either ACARS callback or app-level polling)
+  const mapLiveTelemetry = liveTelemetryForMap || (
+    appLiveTelemetry && appActiveFlightId && appLivePhase
+      ? { telemetry: appLiveTelemetry, phase: appLivePhase, flightId: appActiveFlightId }
+      : null
+  );
 
   useEffect(() => {
     if (darkMode) {
@@ -185,8 +273,8 @@ export default function App() {
   ];
 
   const bottomNavItems = [
+    { id: 'acars' as const, label: 'ACARS', icon: Radar },
     ...(isAdmin ? [
-      { id: 'acars' as const, label: 'ACARS DEV', icon: Radar },
       { id: 'admin' as const, label: 'Admin', icon: Settings },
     ] : []),
   ];
@@ -528,12 +616,12 @@ export default function App() {
             <CapacityChecker airports={airports} routes={routes} />
           )}
 
-          {activeView === 'acars' && isAdmin && (
-            <Acars airports={airports} routes={routes} currentUserId={session?.user?.id || null} isAdmin={isAdmin} simbriefId={profile?.simbrief_id} />
+          {activeView === 'acars' && (
+            <Acars airports={airports} routes={routes} currentUserId={session?.user?.id || null} isAdmin={isAdmin} simbriefId={profile?.simbrief_id} onTelemetryUpdate={handleTelemetryUpdate} />
           )}
 
           {activeView === 'livemap' && (
-            <LiveMap />
+            <LiveMap currentUserId={session?.user?.id || null} liveTelemetry={mapLiveTelemetry} />
           )}
 
           {activeView === 'admin' && isAdmin && (

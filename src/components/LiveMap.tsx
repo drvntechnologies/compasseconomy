@@ -4,6 +4,7 @@ import L from 'leaflet';
 import { supabase } from '../lib/supabase';
 import type { AcarsFlight, FlightBooking, Airport } from '../lib/types';
 import { FLIGHT_PHASE_LABELS } from '../lib/types';
+import type { SimTelemetry } from '../lib/tauri-bridge';
 import { Plane, MapPin, Users, Gauge, TrendingUp, Clock, RefreshCw, Maximize2 } from 'lucide-react';
 
 import 'leaflet/dist/leaflet.css';
@@ -12,6 +13,8 @@ interface LiveMapProps {
   airports?: Airport[];
   compact?: boolean;
   onExpandClick?: () => void;
+  currentUserId?: string | null;
+  liveTelemetry?: { telemetry: SimTelemetry; phase: string; flightId: string } | null;
 }
 
 interface ActiveFlightData {
@@ -77,7 +80,7 @@ function MapBounds({ flights, airports }: { flights: ActiveFlightData[]; airport
   return null;
 }
 
-export default function LiveMap({ compact = false, onExpandClick }: LiveMapProps) {
+export default function LiveMap({ compact = false, onExpandClick, liveTelemetry: liveTelemetryProp }: LiveMapProps) {
   const [activeFlights, setActiveFlights] = useState<ActiveFlightData[]>([]);
   const [airportsWithCoords, setAirportsWithCoords] = useState<AirportWithCoords[]>([]);
   const [selectedFlight, setSelectedFlight] = useState<string | null>(null);
@@ -88,8 +91,7 @@ export default function LiveMap({ compact = false, onExpandClick }: LiveMapProps
     const { data: acarsData } = await supabase
       .from('acars_flights')
       .select('*')
-      .is('ended_at', null)
-      .not('latitude', 'is', null);
+      .is('ended_at', null);
 
     if (!acarsData || acarsData.length === 0) {
       setActiveFlights([]);
@@ -156,17 +158,39 @@ export default function LiveMap({ compact = false, onExpandClick }: LiveMapProps
   useEffect(() => {
     fetchActiveFlights();
     fetchAirportCoords();
-    const interval = setInterval(fetchActiveFlights, 15000);
+    const interval = setInterval(fetchActiveFlights, 10000);
     return () => clearInterval(interval);
   }, [fetchActiveFlights, fetchAirportCoords]);
 
   useEffect(() => {
     if (selectedFlight) {
       fetchFlightPath(selectedFlight);
+      const pathInterval = setInterval(() => fetchFlightPath(selectedFlight), 30000);
+      return () => clearInterval(pathInterval);
     }
   }, [selectedFlight, fetchFlightPath]);
 
-  const selectedData = activeFlights.find(f => f.acars.id === selectedFlight);
+  // Merge live telemetry from current user into the active flights list
+  const displayFlights = activeFlights.map(flight => {
+    if (liveTelemetryProp && flight.acars.id === liveTelemetryProp.flightId) {
+      return {
+        ...flight,
+        acars: {
+          ...flight.acars,
+          latitude: liveTelemetryProp.telemetry.latitude,
+          longitude: liveTelemetryProp.telemetry.longitude,
+          altitude_ft: liveTelemetryProp.telemetry.altitude_ft,
+          ground_speed_kts: liveTelemetryProp.telemetry.ground_speed_kts,
+          heading_deg: liveTelemetryProp.telemetry.heading_deg,
+          vs_fpm: liveTelemetryProp.telemetry.vs_fpm,
+          phase: liveTelemetryProp.phase as any,
+        },
+      };
+    }
+    return flight;
+  });
+
+  const selectedData = displayFlights.find(f => f.acars.id === selectedFlight);
 
   if (compact) {
     return (
@@ -206,8 +230,8 @@ export default function LiveMap({ compact = false, onExpandClick }: LiveMapProps
               <TileLayer
                 url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
               />
-              <MapBounds flights={activeFlights} airports={airportsWithCoords} />
-              {activeFlights.map(flight => (
+              <MapBounds flights={displayFlights} airports={airportsWithCoords} />
+              {displayFlights.map(flight => (
                 flight.acars.latitude != null && flight.acars.longitude != null && (
                   <Marker
                     key={flight.acars.id}
@@ -229,7 +253,7 @@ export default function LiveMap({ compact = false, onExpandClick }: LiveMapProps
         <div>
           <h2 className="text-xl font-bold text-white">Live Map</h2>
           <p className="text-slate-400 text-sm mt-0.5">
-            {activeFlights.length} flight{activeFlights.length !== 1 ? 's' : ''} airborne
+            {displayFlights.length} flight{displayFlights.length !== 1 ? 's' : ''} airborne
           </p>
         </div>
         <button
@@ -250,12 +274,12 @@ export default function LiveMap({ compact = false, onExpandClick }: LiveMapProps
               <span className="text-white font-semibold text-sm">Active Flights</span>
             </div>
             <div className="max-h-[500px] overflow-y-auto divide-y divide-slate-700/50">
-              {activeFlights.length === 0 ? (
+              {displayFlights.length === 0 ? (
                 <div className="p-6 text-center text-slate-500 text-xs">
                   No flights currently airborne
                 </div>
               ) : (
-                activeFlights.map(flight => {
+                displayFlights.map(flight => {
                   const isSelected = selectedFlight === flight.acars.id;
                   return (
                     <button
@@ -343,7 +367,7 @@ export default function LiveMap({ compact = false, onExpandClick }: LiveMapProps
                 url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>'
               />
-              <MapBounds flights={activeFlights} airports={airportsWithCoords} />
+              <MapBounds flights={displayFlights} airports={airportsWithCoords} />
 
               {/* Airport markers */}
               {airportsWithCoords.map(airport => (
@@ -362,7 +386,7 @@ export default function LiveMap({ compact = false, onExpandClick }: LiveMapProps
               ))}
 
               {/* Flight markers */}
-              {activeFlights.map(flight => {
+              {displayFlights.map(flight => {
                 if (flight.acars.latitude == null || flight.acars.longitude == null) return null;
                 const isSelected = selectedFlight === flight.acars.id;
                 return (

@@ -20,6 +20,7 @@ interface AcarsProps {
   currentUserId: string | null;
   isAdmin: boolean;
   simbriefId?: string | null;
+  onTelemetryUpdate?: (telemetry: SimTelemetry, phase: string, flightId: string) => void;
 }
 
 const SIZE_HIERARCHY: SizeCategory[] = ['ramp', 'small', 'medium', 'heavy'];
@@ -37,17 +38,32 @@ const PHASE_COLORS: Record<FlightPhase, string> = {
   parked: 'bg-slate-500/20 text-slate-300',
 };
 
-function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
+function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsProps) {
   const [acarsFlights, setAcarsFlights] = useState<AcarsFlight[]>([]);
   const [bookings, setBookings] = useState<FlightBooking[]>([]);
   const [aircraft, setAircraft] = useState<Aircraft[]>([]);
   const [paxPools, setPaxPools] = useState<PaxPool[]>([]);
   const [pilotNames, setPilotNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
-  const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
+  const [selectedFlightId, setSelectedFlightId] = useState<string | null>(() => {
+    return localStorage.getItem('acars_selected_flight') || null;
+  });
   const [startingTracking, setStartingTracking] = useState<string | null>(null);
   const [checklistTab, setChecklistTab] = useState(0);
-  const [checkedItems, setCheckedItems] = useState<Record<string, Set<number>>>({}); // sectionTitle -> set of checked indices
+  const [checkedItems, setCheckedItems] = useState<Record<string, Set<number>>>(() => {
+    try {
+      const stored = localStorage.getItem('acars_checklist_state');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const result: Record<string, Set<number>> = {};
+        for (const [key, arr] of Object.entries(parsed)) {
+          result[key] = new Set(arr as number[]);
+        }
+        return result;
+      }
+    } catch {}
+    return {};
+  });
   const [assignedGate, setAssignedGate] = useState<Gate | null>(null);
   const [gateAssigning, setGateAssigning] = useState(false);
 
@@ -60,6 +76,9 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
   const [isTauriApp] = useState(() => getIsTauri());
   const [simStatus, setSimStatus] = useState<SimConnectStatus | null>(null);
   const [liveTelemetry, setLiveTelemetry] = useState<SimTelemetry | null>(null);
+  const [livePhase, setLivePhase] = useState<FlightPhase | null>(null);
+  const lastPhasePushRef = useRef<string | null>(null);
+  const phasePushTimerRef = useRef<number | null>(null);
 
   // OFP tab state
   const [acarsTab, setAcarsTab] = useState<'telemetry' | 'ofp'>('telemetry');
@@ -78,12 +97,19 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
   useEffect(() => {
     if (!isTauriApp) return;
     let unlistenTelemetry: (() => void) | null = null;
+    let unlistenPhase: (() => void) | null = null;
     let statusInterval: number | null = null;
     let telemetryInterval: number | null = null;
 
     (async () => {
       unlistenTelemetry = await listenEvent<SimTelemetry>('simconnect-telemetry', (payload) => {
         setLiveTelemetry(payload);
+      });
+
+      unlistenPhase = await listenEvent<string>('simconnect-phase', (payload) => {
+        if (FLIGHT_PHASES.includes(payload as FlightPhase)) {
+          setLivePhase(payload as FlightPhase);
+        }
       });
 
       // Poll telemetry every 1s as fallback in case events aren't received
@@ -103,7 +129,13 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
       const pollStatus = async () => {
         const raw = await invokeCommand<string>('get_simconnect_status');
         if (raw) {
-          try { setSimStatus(JSON.parse(raw)); } catch {}
+          try {
+            const s = JSON.parse(raw) as SimConnectStatus;
+            setSimStatus(s);
+            if (s.phase && FLIGHT_PHASES.includes(s.phase as FlightPhase)) {
+              setLivePhase(s.phase as FlightPhase);
+            }
+          } catch {}
         }
       };
       pollStatus();
@@ -112,6 +144,7 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
 
     return () => {
       unlistenTelemetry?.();
+      unlistenPhase?.();
       if (statusInterval) clearInterval(statusInterval);
       if (telemetryInterval) clearInterval(telemetryInterval);
     };
@@ -122,6 +155,52 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
     if (acarsTab !== 'ofp' || !simbriefId || !selectedFlightId) return;
     fetchOfp();
   }, [acarsTab, simbriefId, selectedFlightId]);
+
+  // Persist selectedFlightId to localStorage
+  useEffect(() => {
+    if (selectedFlightId) {
+      localStorage.setItem('acars_selected_flight', selectedFlightId);
+    } else {
+      localStorage.removeItem('acars_selected_flight');
+    }
+  }, [selectedFlightId]);
+
+  // Persist checkedItems to localStorage
+  useEffect(() => {
+    const serializable: Record<string, number[]> = {};
+    for (const [key, set] of Object.entries(checkedItems)) {
+      serializable[key] = Array.from(set);
+    }
+    localStorage.setItem('acars_checklist_state', JSON.stringify(serializable));
+  }, [checkedItems]);
+
+  // Push phase changes to DB (debounced to max once per 3s)
+  useEffect(() => {
+    if (!livePhase || !selectedFlightId) return;
+    const myAcars = acarsFlights.find(a => a.id === selectedFlightId && a.user_id === currentUserId);
+    if (!myAcars) return;
+    if (myAcars.phase === livePhase && lastPhasePushRef.current === livePhase) return;
+
+    if (phasePushTimerRef.current) clearTimeout(phasePushTimerRef.current);
+    phasePushTimerRef.current = window.setTimeout(async () => {
+      lastPhasePushRef.current = livePhase;
+      await supabase.from('acars_flights').update({ phase: livePhase }).eq('id', myAcars.id);
+      setAcarsFlights(prev => prev.map(a => a.id === myAcars.id ? { ...a, phase: livePhase } : a));
+    }, 3000);
+
+    return () => {
+      if (phasePushTimerRef.current) clearTimeout(phasePushTimerRef.current);
+    };
+  }, [livePhase, selectedFlightId, acarsFlights, currentUserId]);
+
+  // Pass live telemetry + phase up to parent for LiveMap
+  useEffect(() => {
+    if (!liveTelemetry || !selectedFlightId || !onTelemetryUpdate) return;
+    const myAcars = acarsFlights.find(a => a.id === selectedFlightId && a.user_id === currentUserId);
+    if (!myAcars) return;
+    const phase = livePhase || myAcars.phase;
+    onTelemetryUpdate(liveTelemetry, phase, myAcars.id);
+  }, [liveTelemetry, livePhase, selectedFlightId, acarsFlights, currentUserId, onTelemetryUpdate]);
 
   async function fetchOfp() {
     if (!simbriefId) {
@@ -208,13 +287,14 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
 
   useEffect(() => {
     for (const acars of acarsFlights) {
+      const phase = (acars.user_id === currentUserId && livePhase && simStatus?.connected) ? livePhase : acars.phase;
       const prevPhase = prevPhasesRef.current[acars.id];
-      if (prevPhase && prevPhase !== 'landed' && acars.phase === 'landed') {
+      if (prevPhase && prevPhase !== 'landed' && phase === 'landed') {
         autoAssignGate(acars);
       }
-      prevPhasesRef.current[acars.id] = acars.phase;
+      prevPhasesRef.current[acars.id] = phase;
     }
-  }, [acarsFlights]);
+  }, [acarsFlights, livePhase]);
 
   async function stopTracking(acars: AcarsFlight) {
     await supabase.from('acars_flights').update({
@@ -287,7 +367,7 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
 
   async function completeFlight(acars: AcarsFlight) {
     // Auto-calculate engine hours from ACARS flight duration
-    const startedAt = new Date(acars.started_at);
+    const startedAt = new Date(acars.started_at!);
     const now = new Date();
     const hours = Math.round(((now.getTime() - startedAt.getTime()) / 3600000) * 10) / 10;
 
@@ -548,6 +628,14 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
     return getChecklistForAircraft(ac.aircraft_type);
   }, [selectedBooking, aircraftMap]);
 
+  // Use live phase from SimConnect when available for the current user's flight
+  const effectivePhase: FlightPhase = useMemo(() => {
+    if (selectedAcars && selectedAcars.user_id === currentUserId && livePhase && simStatus?.connected) {
+      return livePhase;
+    }
+    return selectedAcars?.phase || 'preflight';
+  }, [selectedAcars, currentUserId, livePhase, simStatus]);
+
   function toggleCheckItem(sectionTitle: string, itemIdx: number) {
     setCheckedItems(prev => {
       const sectionSet = new Set(prev[sectionTitle] || []);
@@ -685,8 +773,8 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
                             CPZ{booking?.flight_number || '???'}
                           </span>
                         </div>
-                        <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${PHASE_COLORS[acars.phase]}`}>
-                          {FLIGHT_PHASE_LABELS[acars.phase]}
+                        <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${PHASE_COLORS[isSelected && livePhase && acars.user_id === currentUserId ? livePhase : acars.phase]}`}>
+                          {FLIGHT_PHASE_LABELS[isSelected && livePhase && acars.user_id === currentUserId ? livePhase : acars.phase]}
                         </span>
                       </div>
                       <div className="mt-1.5 flex items-center gap-2 text-xs text-slate-400">
@@ -699,7 +787,7 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
                       <div className="mt-2 h-1 bg-slate-700 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-gradient-to-r from-sky-500 to-emerald-500 rounded-full transition-all duration-500"
-                          style={{ width: `${getPhaseProgress(acars.phase)}%` }}
+                          style={{ width: `${getPhaseProgress(isSelected && livePhase && acars.user_id === currentUserId ? livePhase : acars.phase)}%` }}
                         />
                       </div>
                     </button>
@@ -774,8 +862,8 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
                     </p>
                   </div>
                   <div className="text-right">
-                    <span className={`text-xs font-semibold px-3 py-1 rounded-full ${PHASE_COLORS[selectedAcars.phase]}`}>
-                      {FLIGHT_PHASE_LABELS[selectedAcars.phase]}
+                    <span className={`text-xs font-semibold px-3 py-1 rounded-full ${PHASE_COLORS[effectivePhase]}`}>
+                      {FLIGHT_PHASE_LABELS[effectivePhase]}
                     </span>
                     {selectedAcars.started_at && (
                       <p className="text-[10px] text-slate-500 mt-1">
@@ -795,7 +883,7 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
                     <div className="absolute inset-x-0 top-1/2 h-px bg-slate-600" />
                     <div
                       className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-sky-400 rounded-full border-2 border-slate-800 transition-all duration-500"
-                      style={{ left: `${getPhaseProgress(selectedAcars.phase)}%` }}
+                      style={{ left: `${getPhaseProgress(effectivePhase)}%` }}
                     />
                   </div>
                   <div className="text-center">
@@ -808,7 +896,7 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
                 <div className="mt-3 h-1.5 bg-slate-700 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-sky-500 via-emerald-500 to-green-400 rounded-full transition-all duration-700"
-                    style={{ width: `${getPhaseProgress(selectedAcars.phase)}%` }}
+                    style={{ width: `${getPhaseProgress(effectivePhase)}%` }}
                   />
                 </div>
               </div>
@@ -906,7 +994,7 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
                     <p className="text-xs text-slate-400 font-medium mb-2">Flight Phases</p>
                     <div className="flex flex-wrap gap-1.5">
                       {FLIGHT_PHASES.map((phase, idx) => {
-                        const currentIdx = FLIGHT_PHASES.indexOf(selectedAcars.phase);
+                        const currentIdx = FLIGHT_PHASES.indexOf(effectivePhase);
                         const isActive = idx === currentIdx;
                         const isPast = idx < currentIdx;
                         return (
@@ -1383,7 +1471,7 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
           </div>
 
           {/* Gate Assignment Card */}
-          {selectedAcars && selectedBooking && (selectedAcars.phase === 'landed' || selectedAcars.phase === 'taxi_in' || selectedAcars.phase === 'parked') && (
+          {selectedAcars && selectedBooking && (effectivePhase === 'landed' || effectivePhase === 'taxi_in' || effectivePhase === 'parked') && (
             <div className="bg-slate-800/50 border border-emerald-500/30 rounded-xl overflow-hidden animate-in">
               <div className="px-4 py-3 border-b border-emerald-500/20 bg-emerald-500/5 flex items-center gap-2">
                 <DoorOpen className="w-4 h-4 text-emerald-400" />
@@ -1423,7 +1511,7 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
           )}
 
           {/* Complete Flight Card - shows when parked (engines off) */}
-          {selectedAcars && selectedBooking && selectedAcars.phase === 'parked' && !selectedAcars.ended_at && (
+          {selectedAcars && selectedBooking && effectivePhase === 'parked' && !selectedAcars.ended_at && (
             <div className="bg-slate-800/50 border border-sky-500/30 rounded-xl overflow-hidden animate-in">
               <div className="px-4 py-3 border-b border-sky-500/20 bg-sky-500/5 flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-sky-400" />
@@ -1441,7 +1529,7 @@ function Acars({ currentUserId, simbriefId, routes }: AcarsProps) {
                     <span className="text-xs text-slate-400 font-medium">Engine Time (auto-calculated)</span>
                   </div>
                   <p className="text-white font-mono font-bold text-lg">
-                    {(Math.round(((Date.now() - new Date(selectedAcars.started_at).getTime()) / 3600000) * 10) / 10).toFixed(1)} hrs
+                    {(Math.round(((Date.now() - new Date(selectedAcars.started_at!).getTime()) / 3600000) * 10) / 10).toFixed(1)} hrs
                   </p>
                 </div>
 
