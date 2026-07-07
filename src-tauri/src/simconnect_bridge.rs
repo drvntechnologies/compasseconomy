@@ -131,6 +131,10 @@ impl SimState {
         self.parked_timer = None;
     }
 
+    pub fn update_token(&mut self, token: String) {
+        self.supabase_token = Some(token);
+    }
+
     pub fn stop_tracking(&mut self) {
         self.tracking = false;
         self.supabase_url = None;
@@ -222,8 +226,8 @@ fn simconnect_poll_loop(
     };
 
     let mut registered = false;
-    let mut last_report = Instant::now();
     let report_interval = Duration::from_secs(15);
+    let mut last_report = Instant::now() - report_interval;
     let mut phase = FlightPhase::Preflight;
     let mut was_airborne = false;
     let mut parked_timer: Option<Instant> = None;

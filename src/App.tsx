@@ -184,6 +184,12 @@ export default function App() {
       if (session) {
         (async () => {
           await fetchProfile(session.user.id);
+          // Push refreshed token to Rust for position reporting
+          if (appIsTauri && (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN')) {
+            await invokeCommand('update_flight_token', {
+              supabaseToken: session.access_token,
+            });
+          }
         })();
       } else {
         setProfile(null);

@@ -150,6 +150,22 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
     };
   }, [isTauriApp]);
 
+  // Periodically refresh the auth token sent to Rust for position reporting
+  useEffect(() => {
+    if (!isTauriApp) return;
+    const refreshToken = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        await invokeCommand('update_flight_token', {
+          supabaseToken: session.access_token,
+        });
+      }
+    };
+    // Refresh every 10 minutes to stay well ahead of token expiry
+    const interval = setInterval(refreshToken, 10 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [isTauriApp]);
+
   // Fetch OFP from SimBrief when OFP tab is opened
   useEffect(() => {
     if (acarsTab !== 'ofp' || !simbriefId || !selectedFlightId) return;

@@ -48,6 +48,16 @@ fn stop_flight_tracking(state: tauri::State<'_, Arc<Mutex<SimState>>>) -> Result
 }
 
 #[tauri::command]
+fn update_flight_token(
+    state: tauri::State<'_, Arc<Mutex<SimState>>>,
+    supabase_token: String,
+) -> Result<(), String> {
+    let mut sim = state.lock().map_err(|e| e.to_string())?;
+    sim.update_token(supabase_token);
+    Ok(())
+}
+
+#[tauri::command]
 fn get_current_telemetry(state: tauri::State<'_, Arc<Mutex<SimState>>>) -> Result<String, String> {
     let sim = state.lock().map_err(|e| e.to_string())?;
     serde_json::to_string(&sim.telemetry()).map_err(|e| e.to_string())
@@ -63,6 +73,7 @@ fn main() {
             stop_simconnect,
             start_flight_tracking,
             stop_flight_tracking,
+            update_flight_token,
             get_current_telemetry,
         ])
         .run(tauri::generate_context!())
