@@ -285,10 +285,17 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
 
   // Track previously seen phases to detect transitions (for gate assignment on landing)
   const prevPhasesRef = useRef<Record<string, FlightPhase>>({});
+  // Track the highest phase index reached per flight (to distinguish origin-parked from destination-parked)
+  const maxPhaseReachedRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     for (const acars of acarsFlights) {
       const phase = (acars.user_id === currentUserId && livePhase && simStatus?.connected) ? livePhase : acars.phase;
+      const phaseIdx = FLIGHT_PHASES.indexOf(phase);
+      const currentMax = maxPhaseReachedRef.current[acars.id] ?? -1;
+      if (phaseIdx > currentMax) {
+        maxPhaseReachedRef.current[acars.id] = phaseIdx;
+      }
       const prevPhase = prevPhasesRef.current[acars.id];
       if (prevPhase && prevPhase !== 'landed' && phase === 'landed') {
         autoAssignGate(acars);
@@ -648,6 +655,14 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
     }
     return selectedAcars?.phase || 'preflight';
   }, [selectedAcars, currentUserId, livePhase, simStatus]);
+
+  // Only true once the flight has progressed past takeoff (reached at least 'landed')
+  const hasBeenAirborne = useMemo(() => {
+    if (!selectedAcars) return false;
+    const maxIdx = maxPhaseReachedRef.current[selectedAcars.id] ?? -1;
+    // 'landed' is index 7 in FLIGHT_PHASES
+    return maxIdx >= FLIGHT_PHASES.indexOf('landed');
+  }, [selectedAcars, effectivePhase]);
 
   function toggleCheckItem(sectionTitle: string, itemIdx: number) {
     setCheckedItems(prev => {
@@ -1496,7 +1511,7 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
           </div>
 
           {/* Gate Assignment Card */}
-          {selectedAcars && selectedBooking && (effectivePhase === 'landed' || effectivePhase === 'taxi_in' || effectivePhase === 'parked') && (
+          {selectedAcars && selectedBooking && hasBeenAirborne && (effectivePhase === 'landed' || effectivePhase === 'taxi_in' || effectivePhase === 'parked') && (
             <div className="bg-slate-800/50 border border-emerald-500/30 rounded-xl overflow-hidden animate-in">
               <div className="px-4 py-3 border-b border-emerald-500/20 bg-emerald-500/5 flex items-center gap-2">
                 <DoorOpen className="w-4 h-4 text-emerald-400" />
@@ -1535,8 +1550,8 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
             </div>
           )}
 
-          {/* Complete Flight Card - shows during arrival taxi or parked */}
-          {selectedAcars && selectedBooking && (effectivePhase === 'parked' || effectivePhase === 'arrival_taxi') && !selectedAcars.ended_at && (
+          {/* Complete Flight Card - shows only after the flight has been airborne and landed */}
+          {selectedAcars && selectedBooking && hasBeenAirborne && (effectivePhase === 'parked' || effectivePhase === 'taxi_in') && !selectedAcars.ended_at && (
             <div className="bg-slate-800/50 border border-sky-500/30 rounded-xl overflow-hidden animate-in">
               <div className="px-4 py-3 border-b border-sky-500/20 bg-sky-500/5 flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-sky-400" />
