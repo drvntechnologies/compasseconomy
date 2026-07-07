@@ -319,10 +319,22 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
 
   async function autoAssignGate(acars: AcarsFlight) {
     setGateAssigning(true);
-    const booking = bookings.find(b => b.id === acars.booking_id);
+
+    // Fetch fresh booking and aircraft data directly from DB to avoid stale state
+    const { data: booking } = await supabase
+      .from('flight_bookings')
+      .select('*')
+      .eq('id', acars.booking_id)
+      .maybeSingle();
+
     if (!booking?.aircraft_id) { setGateAssigning(false); return; }
 
-    const ac = aircraft.find(a => a.id === booking.aircraft_id);
+    const { data: ac } = await supabase
+      .from('aircraft')
+      .select('*')
+      .eq('id', booking.aircraft_id)
+      .maybeSingle();
+
     if (!ac) { setGateAssigning(false); return; }
 
     const arrivalIcao = booking.arrival_icao;
