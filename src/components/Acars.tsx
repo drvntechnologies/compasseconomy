@@ -631,6 +631,8 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
     [acarsFlights, selectedFlightId]
   );
 
+  const isOwnFlight = selectedAcars?.user_id === currentUserId;
+
   const selectedBooking = useMemo(() =>
     selectedAcars ? bookingMap[selectedAcars.booking_id] : null,
     [selectedAcars, bookingMap]
@@ -974,7 +976,7 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
                     <div className="bg-slate-900/50 rounded-lg p-3 text-center">
                       <TrendingUp className="w-4 h-4 text-sky-400 mx-auto mb-1" />
                       <p className="text-white font-mono font-bold text-sm">
-                        {(liveTelemetry && simStatus?.connected)
+                        {(isOwnFlight && liveTelemetry && simStatus?.connected)
                           ? liveTelemetry.altitude_ft.toLocaleString()
                           : selectedAcars.altitude_ft != null ? selectedAcars.altitude_ft.toLocaleString() : '---'}
                       </p>
@@ -983,7 +985,7 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
                     <div className="bg-slate-900/50 rounded-lg p-3 text-center">
                       <Gauge className="w-4 h-4 text-emerald-400 mx-auto mb-1" />
                       <p className="text-white font-mono font-bold text-sm">
-                        {(liveTelemetry && simStatus?.connected)
+                        {(isOwnFlight && liveTelemetry && simStatus?.connected)
                           ? liveTelemetry.ground_speed_kts
                           : selectedAcars.ground_speed_kts ?? '---'}
                       </p>
@@ -992,18 +994,18 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
                     <div className="bg-slate-900/50 rounded-lg p-3 text-center">
                       <Compass className="w-4 h-4 text-amber-400 mx-auto mb-1" />
                       <p className="text-white font-mono font-bold text-sm">
-                        {(liveTelemetry && simStatus?.connected)
+                        {(isOwnFlight && liveTelemetry && simStatus?.connected)
                           ? `${liveTelemetry.heading_deg}°`
                           : selectedAcars.heading_deg != null ? `${selectedAcars.heading_deg}°` : '---'}
                       </p>
                       <p className="text-[10px] text-slate-500">HDG</p>
                     </div>
                     <div className="bg-slate-900/50 rounded-lg p-3 text-center">
-                      {((liveTelemetry && simStatus?.connected) ? liveTelemetry.vs_fpm : (selectedAcars.vs_fpm ?? 0)) >= 0
+                      {((isOwnFlight && liveTelemetry && simStatus?.connected) ? liveTelemetry.vs_fpm : (selectedAcars.vs_fpm ?? 0)) >= 0
                         ? <TrendingUp className="w-4 h-4 text-green-400 mx-auto mb-1" />
                         : <TrendingDown className="w-4 h-4 text-red-400 mx-auto mb-1" />}
                       <p className="text-white font-mono font-bold text-sm">
-                        {(liveTelemetry && simStatus?.connected)
+                        {(isOwnFlight && liveTelemetry && simStatus?.connected)
                           ? `${liveTelemetry.vs_fpm > 0 ? '+' : ''}${liveTelemetry.vs_fpm}`
                           : selectedAcars.vs_fpm != null ? `${selectedAcars.vs_fpm > 0 ? '+' : ''}${selectedAcars.vs_fpm}` : '---'}
                       </p>
@@ -1012,7 +1014,7 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
                     <div className="bg-slate-900/50 rounded-lg p-3 text-center">
                       <Fuel className="w-4 h-4 text-orange-400 mx-auto mb-1" />
                       <p className="text-white font-mono font-bold text-sm">
-                        {(liveTelemetry && simStatus?.connected)
+                        {(isOwnFlight && liveTelemetry && simStatus?.connected)
                           ? Math.round(liveTelemetry.fuel_lbs).toLocaleString()
                           : selectedAcars.fuel_lbs != null ? Math.round(Number(selectedAcars.fuel_lbs)).toLocaleString() : '---'}
                       </p>
@@ -1021,7 +1023,7 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
                     <div className="bg-slate-900/50 rounded-lg p-3 text-center">
                       <Clock className="w-4 h-4 text-violet-400 mx-auto mb-1" />
                       <p className="text-white font-mono font-bold text-sm">
-                        {(liveTelemetry && simStatus?.connected)
+                        {(isOwnFlight && liveTelemetry && simStatus?.connected)
                           ? `${liveTelemetry.sim_rate}x`
                           : `${selectedAcars.sim_rate}x`}
                       </p>
@@ -1053,6 +1055,7 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
                         );
                       })}
                     </div>
+                    {isOwnFlight && (
                     <div className="mt-3 flex gap-2">
                       <button
                         onClick={() => stopTracking(selectedAcars)}
@@ -1063,6 +1066,7 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
                         Cancel Flight
                       </button>
                     </div>
+                    )}
                   </div>
                 </>
               ) : (
@@ -1551,7 +1555,7 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
           )}
 
           {/* Complete Flight Card - shows only after the flight has been airborne and landed */}
-          {selectedAcars && selectedBooking && hasBeenAirborne && (effectivePhase === 'parked' || effectivePhase === 'taxi_in') && !selectedAcars.ended_at && (
+          {selectedAcars && selectedBooking && isOwnFlight && hasBeenAirborne && (effectivePhase === 'parked' || effectivePhase === 'taxi_in') && !selectedAcars.ended_at && (
             <div className="bg-slate-800/50 border border-sky-500/30 rounded-xl overflow-hidden animate-in">
               <div className="px-4 py-3 border-b border-sky-500/20 bg-sky-500/5 flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-sky-400" />
