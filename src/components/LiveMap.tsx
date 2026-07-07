@@ -158,8 +158,25 @@ export default function LiveMap({ compact = false, onExpandClick, liveTelemetry:
   useEffect(() => {
     fetchActiveFlights();
     fetchAirportCoords();
-    const interval = setInterval(fetchActiveFlights, 10000);
-    return () => clearInterval(interval);
+
+    // Subscribe to realtime changes on acars_flights for instant map updates
+    const channel = supabase
+      .channel('livemap-acars')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'acars_flights',
+      }, () => {
+        fetchActiveFlights();
+      })
+      .subscribe();
+
+    // Fallback poll every 30s in case realtime misses
+    const interval = setInterval(fetchActiveFlights, 30000);
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
   }, [fetchActiveFlights, fetchAirportCoords]);
 
   useEffect(() => {

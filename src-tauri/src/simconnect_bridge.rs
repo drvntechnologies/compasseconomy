@@ -223,7 +223,7 @@ fn simconnect_poll_loop(
 
     let mut registered = false;
     let mut last_report = Instant::now();
-    let report_interval = Duration::from_secs(120);
+    let report_interval = Duration::from_secs(15);
     let mut phase = FlightPhase::Preflight;
     let mut was_airborne = false;
     let mut parked_timer: Option<Instant> = None;
