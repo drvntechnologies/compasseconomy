@@ -782,7 +782,12 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
                         <span>{booking?.departure_icao}</span>
                         <ArrowRight className="w-3 h-3" />
                         <span>{booking?.arrival_icao}</span>
-                        {ac && <span className="text-slate-500 ml-auto font-mono">{ac.tail_number}</span>}
+                        {ac && (
+                          <span className="text-slate-500 ml-auto font-mono">
+                            {ac.tail_number}
+                            {booking?.departure_gate && <span className="text-sky-400/70"> | G{booking.departure_gate}</span>}
+                          </span>
+                        )}
                       </div>
                       {/* Phase progress bar */}
                       <div className="mt-2 h-1 bg-slate-700 rounded-full overflow-hidden">
@@ -821,7 +826,11 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
                           <span>{booking.departure_icao}</span>
                           <ArrowRight className="w-3 h-3" />
                           <span>{booking.arrival_icao}</span>
-                          {ac && <span className="text-slate-500 ml-1">({ac.tail_number})</span>}
+                          {ac && (
+                            <span className="text-slate-500 ml-1">
+                              ({ac.tail_number}{booking.departure_gate ? ` | G${booking.departure_gate}` : ''})
+                            </span>
+                          )}
                           <span className="ml-auto text-slate-500">{booking.pax_count} PAX</span>
                         </div>
                       </div>
@@ -860,6 +869,9 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
                       {selectedBooking.aircraft_id && aircraftMap[selectedBooking.aircraft_id]
                         ? aircraftMap[selectedBooking.aircraft_id].tail_number
                         : 'No aircraft'}
+                      {selectedBooking.departure_gate && (
+                        <span className="text-sky-400"> &middot; Gate {selectedBooking.departure_gate}</span>
+                      )}
                     </p>
                   </div>
                   <div className="text-right">

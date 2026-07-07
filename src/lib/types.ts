@@ -92,6 +92,7 @@ export interface FlightBooking {
   status: 'booked' | 'in_progress' | 'completed' | 'cancelled';
   aircraft_id: string | null;
   engine_hours: number | null;
+  departure_gate: string | null;
   created_at: string;
 }
 

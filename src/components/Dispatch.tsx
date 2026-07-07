@@ -393,6 +393,21 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
       reserved_by_booking_id: booking.id,
     }).eq('id', selectedAircraftId);
 
+    // Capture departure gate before releasing it
+    const { data: depGateData } = await supabase
+      .from('gates')
+      .select('gate_number')
+      .eq('assigned_aircraft_id', selectedAircraftId)
+      .eq('airport_icao', departureIcao)
+      .eq('status', 'occupied')
+      .maybeSingle();
+
+    if (depGateData) {
+      await supabase.from('flight_bookings').update({
+        departure_gate: depGateData.gate_number,
+      }).eq('id', booking.id);
+    }
+
     // Release departure gate if this aircraft was occupying one
     await supabase.from('gates').update({
       status: 'open',
@@ -1166,13 +1181,13 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
                             <Plane className="w-3 h-3 text-sky-400" />
                             <span className="text-white font-mono font-medium">{aircraftForBooking.tail_number}</span>
                             <span className="text-slate-500">{aircraftForBooking.aircraft_type}</span>
-                          </div>
-                        )}
-                        {depGate && (
-                          <div className="flex items-center gap-1.5 text-xs bg-sky-500/5 border border-sky-500/20 px-2.5 py-1 rounded-lg">
-                            <DoorOpen className="w-3 h-3 text-sky-400" />
-                            <span className="text-sky-300 font-medium">DEP Gate {depGate.gate_number}</span>
-                            <span className="text-slate-500">{depGate.airport_icao}</span>
+                            {(booking.departure_gate || depGate) && (
+                              <>
+                                <span className="text-slate-600 mx-0.5">|</span>
+                                <DoorOpen className="w-3 h-3 text-sky-400" />
+                                <span className="text-sky-300 font-medium">Gate {booking.departure_gate || depGate?.gate_number}</span>
+                              </>
+                            )}
                           </div>
                         )}
                         {assignedGate && (
