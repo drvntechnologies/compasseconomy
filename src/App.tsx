@@ -17,6 +17,7 @@ import Finances from './components/Finances';
 import Acars from './components/Acars';
 import LiveMap from './components/LiveMap';
 import SimConnectIndicator from './components/SimConnectIndicator';
+import AppUpdater from './components/AppUpdater';
 import { Plane, LogOut, LayoutDashboard, Settings, Users, Navigation, Clock, Gauge, Radio, Radar, PanelLeftClose, PanelLeft, DoorOpen, DollarSign, KeyRound, Sun, Moon, Monitor, Laptop, Menu, X, ChevronDown, Map } from 'lucide-react';
 import type { Session } from '@supabase/supabase-js';
 
@@ -759,6 +760,8 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <AppUpdater />
     </div>
   );
 }
