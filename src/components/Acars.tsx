@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { getIsTauri, invokeCommand, listenEvent } from '../lib/tauri-bridge';
-import type { SimTelemetry, SimConnectStatus } from '../lib/tauri-bridge';
+import type { SimTelemetry, SimConnectStatus, FlightEvent } from '../lib/tauri-bridge';
 import type { Airport, Route, FlightBooking, Aircraft, PaxPool, AcarsFlight, FlightPhase, Gate, SizeCategory } from '../lib/types';
 import { FLIGHT_PHASES, FLIGHT_PHASE_LABELS } from '../lib/types';
 import { getChecklistForAircraft } from '../lib/checklists';
@@ -11,7 +11,7 @@ import {
   Radar, AlertTriangle, Plane, Play, Square, ChevronRight, Users, MapPin,
   ArrowRight, Clock, Gauge, Compass, TrendingUp, TrendingDown, Fuel, RefreshCw,
   Radio, ClipboardList, Check, ChevronLeft, RotateCcw, DoorOpen, Wifi, WifiOff, FileText,
-  CheckCircle, Timer
+  CheckCircle, Timer, Zap, Lightbulb, CircleDot, Send
 } from 'lucide-react';
 
 interface AcarsProps {
@@ -87,6 +87,22 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
   const [ofpLoading, setOfpLoading] = useState(false);
   const [ofpError, setOfpError] = useState<string | null>(null);
 
+  // Flight event logger state
+  interface LoggedEvent {
+    id: number;
+    event: string;
+    value: number | null;
+    detail: string | null;
+    timestamp: Date;
+  }
+  const [flightEvents, setFlightEvents] = useState<LoggedEvent[]>([]);
+  const eventIdRef = useRef(0);
+  const flightStartRef = useRef<Date | null>(null);
+
+  // Popup overlay state
+  const [popup, setPopup] = useState<{ type: 'landing' | 'gate'; value?: number; gate?: Gate } | null>(null);
+  const popupTimerRef = useRef<number | null>(null);
+
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 15000);
@@ -149,6 +165,58 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
       if (telemetryInterval) clearInterval(telemetryInterval);
     };
   }, [isTauriApp]);
+
+  // Flight event listener (Tauri only)
+  useEffect(() => {
+    if (!isTauriApp) return;
+    let unlistenEvents: (() => void) | null = null;
+
+    (async () => {
+      unlistenEvents = await listenEvent<FlightEvent>('simconnect-flight-event', (payload) => {
+        const newEvent: LoggedEvent = {
+          id: ++eventIdRef.current,
+          event: payload.event,
+          value: payload.value,
+          detail: payload.detail,
+          timestamp: new Date(),
+        };
+        setFlightEvents(prev => [newEvent, ...prev].slice(0, 100));
+
+        if (payload.event === 'landing' && payload.value != null) {
+          showPopup('landing', payload.value);
+        }
+
+        const flightId = selectedFlightId;
+        if (flightId) {
+          supabase.from('acars_flight_events').insert({
+            acars_flight_id: flightId,
+            event_type: payload.event,
+            value: payload.value,
+            detail: payload.detail,
+          }).then(({ error }) => {
+            if (error) console.warn('[ACARS] Event persist failed:', error.message);
+          });
+        }
+      });
+    })();
+
+    return () => { unlistenEvents?.(); };
+  }, [isTauriApp, selectedFlightId]);
+
+  const showPopup = useCallback((type: 'landing' | 'gate', value?: number, gate?: Gate) => {
+    if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
+    setPopup({ type, value, gate });
+    popupTimerRef.current = window.setTimeout(() => setPopup(null), 10000);
+  }, []);
+
+  useEffect(() => {
+    if (selectedFlightId && acarsFlights.find(a => a.id === selectedFlightId)) {
+      const acars = acarsFlights.find(a => a.id === selectedFlightId);
+      if (acars?.started_at) {
+        flightStartRef.current = new Date(acars.started_at);
+      }
+    }
+  }, [selectedFlightId, acarsFlights]);
 
   // Periodically refresh the auth token sent to Rust for position reporting
   useEffect(() => {
@@ -400,6 +468,7 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
     }
 
     setAssignedGate({ ...bestGate, status: 'occupied', assigned_aircraft_id: booking.aircraft_id, assigned_booking_id: booking.id });
+    showPopup('gate', undefined, { ...bestGate, status: 'occupied', assigned_aircraft_id: booking.aircraft_id, assigned_booking_id: booking.id });
     setGateAssigning(false);
   }
 
@@ -727,6 +796,52 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
     return `${hrs}h ${mins % 60}m`;
   }
 
+  function formatEventTime(timestamp: Date): string {
+    if (!flightStartRef.current) return timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const diff = timestamp.getTime() - flightStartRef.current.getTime();
+    if (diff < 0) return 'T-0:00';
+    const totalSec = Math.floor(diff / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    if (h > 0) return `+${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return `+${m}:${s.toString().padStart(2, '0')}`;
+  }
+
+  function getEventIcon(event: string) {
+    switch (event) {
+      case 'engine_start': case 'engine_stop': return <Zap className="w-3 h-3" />;
+      case 'gear_up': case 'gear_down': return <CircleDot className="w-3 h-3" />;
+      case 'landing': return <Plane className="w-3 h-3" />;
+      case 'light_on': case 'light_off': return <Lightbulb className="w-3 h-3" />;
+      case 'position_report': return <Send className="w-3 h-3" />;
+      default: return <Radio className="w-3 h-3" />;
+    }
+  }
+
+  function getEventColor(event: string): string {
+    switch (event) {
+      case 'engine_start': return 'text-orange-400';
+      case 'engine_stop': return 'text-red-400';
+      case 'gear_up': case 'gear_down': return 'text-sky-400';
+      case 'landing': return 'text-green-400';
+      case 'light_on': return 'text-amber-400';
+      case 'light_off': return 'text-slate-400';
+      case 'position_report': return 'text-emerald-400';
+      default: return 'text-slate-400';
+    }
+  }
+
+  function getLandingRating(fpm: number): { label: string; color: string } {
+    const abs = Math.abs(fpm);
+    if (abs <= 100) return { label: 'Butter', color: 'text-emerald-400' };
+    if (abs <= 200) return { label: 'Smooth', color: 'text-green-400' };
+    if (abs <= 300) return { label: 'Normal', color: 'text-sky-400' };
+    if (abs <= 500) return { label: 'Hard', color: 'text-amber-400' };
+    if (abs <= 700) return { label: 'Very Hard', color: 'text-orange-400' };
+    return { label: 'Crash', color: 'text-red-400' };
+  }
+
   if (loading) {
     return (
       <div className="p-8 flex items-center justify-center">
@@ -908,6 +1023,49 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
               )}
             </div>
           </div>
+
+          {/* Flight Event Logger */}
+          {selectedAcars && isTauriApp && (
+            <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-700 flex items-center gap-2">
+                <Radio className="w-4 h-4 text-cyan-400" />
+                <h3 className="text-white font-semibold text-sm">Flight Events</h3>
+                {flightEvents.length > 0 && (
+                  <span className="ml-auto text-[10px] text-slate-500 font-mono">{flightEvents.length}</span>
+                )}
+              </div>
+              <div className="max-h-[300px] overflow-y-auto">
+                {flightEvents.length === 0 ? (
+                  <div className="p-4 text-center text-slate-500 text-xs">
+                    Waiting for events...
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-700/30">
+                    {flightEvents.map(evt => (
+                      <div key={evt.id} className="px-3 py-2 flex items-start gap-2">
+                        <span className={`mt-0.5 shrink-0 ${getEventColor(evt.event)}`}>
+                          {getEventIcon(evt.event)}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-slate-200 truncate">
+                            {evt.detail || evt.event.replace('_', ' ')}
+                          </p>
+                          {evt.event === 'landing' && evt.value != null && (
+                            <p className={`text-[10px] font-mono font-bold ${getLandingRating(evt.value).color}`}>
+                              {evt.value} fpm - {getLandingRating(evt.value).label}
+                            </p>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-500 font-mono shrink-0">
+                          {formatEventTime(evt.timestamp)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
         </div>
 
@@ -1676,6 +1834,57 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
           mlwKg={aircraftMap[selectedBooking.aircraft_id].mlw_kg}
           onClose={() => setSimbriefOpen(false)}
         />
+      )}
+
+      {/* Landing Rate / Gate Assignment Popup Overlay */}
+      {popup && (
+        <div
+          className="fixed top-6 left-6 z-50 animate-in slide-in-from-left duration-300 cursor-pointer"
+          onClick={() => { setPopup(null); if (popupTimerRef.current) clearTimeout(popupTimerRef.current); }}
+        >
+          {popup.type === 'landing' && popup.value != null && (() => {
+            const rating = getLandingRating(popup.value);
+            return (
+              <div className="bg-slate-900/95 backdrop-blur-md border border-slate-600/50 rounded-xl px-5 py-4 shadow-2xl shadow-black/50 min-w-[200px]">
+                <div className="flex items-center gap-2 mb-2">
+                  <Plane className="w-4 h-4 text-green-400" />
+                  <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Touchdown</span>
+                </div>
+                <p className={`font-mono font-bold text-3xl ${rating.color}`}>
+                  {popup.value} <span className="text-base font-medium">fpm</span>
+                </p>
+                <p className={`text-sm font-semibold mt-1 ${rating.color}`}>{rating.label}</p>
+                <div className="mt-2 h-1 rounded-full bg-slate-700 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      Math.abs(popup.value) <= 100 ? 'bg-emerald-500 w-full' :
+                      Math.abs(popup.value) <= 200 ? 'bg-green-500 w-5/6' :
+                      Math.abs(popup.value) <= 300 ? 'bg-sky-500 w-4/6' :
+                      Math.abs(popup.value) <= 500 ? 'bg-amber-500 w-3/6' :
+                      'bg-red-500 w-2/6'
+                    }`}
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500 mt-2">Click to dismiss</p>
+              </div>
+            );
+          })()}
+          {popup.type === 'gate' && popup.gate && (
+            <div className="bg-slate-900/95 backdrop-blur-md border border-emerald-500/30 rounded-xl px-5 py-4 shadow-2xl shadow-black/50 min-w-[200px]">
+              <div className="flex items-center gap-2 mb-2">
+                <DoorOpen className="w-4 h-4 text-emerald-400" />
+                <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Gate Assigned</span>
+              </div>
+              <p className="font-mono font-bold text-3xl text-emerald-400">
+                {popup.gate.gate_number}
+              </p>
+              <p className="text-slate-400 text-xs mt-1">
+                {popup.gate.airport_icao} - {popup.gate.gate_type} gate
+              </p>
+              <p className="text-[10px] text-slate-500 mt-2">Click to dismiss</p>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

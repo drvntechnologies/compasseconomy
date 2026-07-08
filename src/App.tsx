@@ -762,18 +762,3 @@ export default function App() {
     </div>
   );
 }
-
-                  <li className="flex gap-2"><span className="text-emerald-400 shrink-0">+</span>Added delete confirmation dialogs for airports and routes in Admin</li>
-                  <li className="flex gap-2"><span className="text-emerald-400 shrink-0">+</span>Added atomic balance adjustment to prevent financial race conditions</li>
-                  <li className="flex gap-2"><span className="text-sky-400 shrink-0">~</span>Fixed Dispatch N+1 query problem (batch-fetches pools, cargo, aircraft, gates in parallel)</li>
-                  <li className="flex gap-2"><span className="text-sky-400 shrink-0">~</span>Fixed null reference crash when cancelling a booking that left state</li>
-                  <li className="flex gap-2"><span className="text-sky-400 shrink-0">~</span>Fixed gate assignment race condition (now verifies gate still open before claiming)</li>
-                  <li className="flex gap-2"><span className="text-sky-400 shrink-0">~</span>Fixed pax reservation rollback not releasing already-reserved pools on failure</li>
-                  <li className="flex gap-2"><span className="text-sky-400 shrink-0">~</span>Fixed cargo loading errors being silently swallowed (now logs and continues)</li>
-                  <li className="flex gap-2"><span className="text-sky-400 shrink-0">~</span>Fixed Discord notifications being fire-and-forget with no error visibility</li>
-                  <li className="flex gap-2"><span className="text-sky-400 shrink-0">~</span>Fixed flight log using booked pax count instead of actual arrived pax count</li>
-                  <li className="flex gap-2"><span className="text-sky-400 shrink-0">~</span>Fixed bill-hourly-gates balance update race condition with atomic RPC</li>
-                  <li className="flex gap-2"><span className="text-sky-400 shrink-0">~</span>Fixed edge functions crashing on missing env vars (now returns proper errors)</li>
-                  <li className="flex gap-2"><span className="text-sky-400 shrink-0">~</span>Fixed admin-set-password accepting weak passwords (now requires 8+ chars, mixed case, number)</li>
-                  <li className="flex gap-2"><span className="text-sky-400 shrink-0">~</span>Fixed aircraft cost lookup in ACARS flight completion (falls back to DB if not in cache)</li>
-                  <li className="flex gap-2"><span className="text-slate-400 shrink-0">-</span>Removed duplicate fetch logic in Dispatch (single shared loader)</li>

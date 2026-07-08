@@ -17,6 +17,16 @@ pub struct Telemetry {
     pub on_ground: bool,
     pub sim_rate: f64,
     pub gear_handle: bool,
+    pub eng1_combustion: bool,
+    pub eng2_combustion: bool,
+    pub light_nav: bool,
+    pub light_beacon: bool,
+    pub light_landing: bool,
+    pub light_taxi: bool,
+    pub light_strobe: bool,
+    pub light_logo: bool,
+    pub light_wing: bool,
+    pub light_recognition: bool,
 }
 
 impl Default for Telemetry {
@@ -32,8 +42,25 @@ impl Default for Telemetry {
             on_ground: true,
             sim_rate: 1.0,
             gear_handle: true,
+            eng1_combustion: false,
+            eng2_combustion: false,
+            light_nav: false,
+            light_beacon: false,
+            light_landing: false,
+            light_taxi: false,
+            light_strobe: false,
+            light_logo: false,
+            light_wing: false,
+            light_recognition: false,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FlightEvent {
+    pub event: String,
+    pub value: Option<i32>,
+    pub detail: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -204,6 +231,26 @@ struct AircraftData {
     sim_rate: f64,
     #[simconnect(name = "GEAR HANDLE POSITION")]
     gear_handle: bool,
+    #[simconnect(name = "ENG COMBUSTION:1")]
+    eng1_combustion: bool,
+    #[simconnect(name = "ENG COMBUSTION:2")]
+    eng2_combustion: bool,
+    #[simconnect(name = "LIGHT NAV")]
+    light_nav: bool,
+    #[simconnect(name = "LIGHT BEACON")]
+    light_beacon: bool,
+    #[simconnect(name = "LIGHT LANDING")]
+    light_landing: bool,
+    #[simconnect(name = "LIGHT TAXI")]
+    light_taxi: bool,
+    #[simconnect(name = "LIGHT STROBE")]
+    light_strobe: bool,
+    #[simconnect(name = "LIGHT LOGO")]
+    light_logo: bool,
+    #[simconnect(name = "LIGHT WING")]
+    light_wing: bool,
+    #[simconnect(name = "LIGHT RECOGNITION")]
+    light_recognition: bool,
 }
 
 #[cfg(windows)]
@@ -231,6 +278,7 @@ fn simconnect_poll_loop(
     let mut phase = FlightPhase::Preflight;
     let mut was_airborne = false;
     let mut parked_timer: Option<Instant> = None;
+    let mut prev_telemetry: Option<Telemetry> = None;
 
     loop {
         if !connected.load(Ordering::Relaxed) {
@@ -265,15 +313,29 @@ fn simconnect_poll_loop(
                         on_ground: ad.on_ground,
                         sim_rate: ad.sim_rate,
                         gear_handle: ad.gear_handle,
+                        eng1_combustion: ad.eng1_combustion,
+                        eng2_combustion: ad.eng2_combustion,
+                        light_nav: ad.light_nav,
+                        light_beacon: ad.light_beacon,
+                        light_landing: ad.light_landing,
+                        light_taxi: ad.light_taxi,
+                        light_strobe: ad.light_strobe,
+                        light_logo: ad.light_logo,
+                        light_wing: ad.light_wing,
+                        light_recognition: ad.light_recognition,
                     };
 
                     phase = detect_phase_from(&telemetry, &phase, &mut was_airborne, &mut parked_timer);
+
+                    if let Some(ref prev) = prev_telemetry {
+                        detect_and_emit_events(&app, prev, &telemetry);
+                    }
 
                     let _ = app.emit("simconnect-telemetry", &telemetry);
                     let _ = app.emit("simconnect-phase", phase.as_str());
 
                     if let Ok(mut s) = state.lock() {
-                        s.current_telemetry = telemetry;
+                        s.current_telemetry = telemetry.clone();
                         s.current_phase = phase.clone();
                         s.was_airborne = was_airborne;
                         s.parked_timer = parked_timer;
@@ -282,7 +344,14 @@ fn simconnect_poll_loop(
                     if last_report.elapsed() >= report_interval {
                         send_position_report(&state);
                         last_report = Instant::now();
+                        let _ = app.emit("simconnect-flight-event", &FlightEvent {
+                            event: "position_report".to_string(),
+                            value: None,
+                            detail: Some(format!("Alt {}ft, GS {}kts", telemetry.altitude_ft, telemetry.ground_speed_kts)),
+                        });
                     }
+
+                    prev_telemetry = Some(telemetry);
                 }
             }
             Ok(Some(Notification::Quit)) => {
@@ -307,6 +376,88 @@ fn simconnect_poll_loop(
 }
 
 #[cfg(windows)]
+fn detect_and_emit_events(app: &tauri::AppHandle, prev: &Telemetry, curr: &Telemetry) {
+    if !prev.eng1_combustion && curr.eng1_combustion {
+        let _ = app.emit("simconnect-flight-event", &FlightEvent {
+            event: "engine_start".to_string(),
+            value: Some(1),
+            detail: Some("Engine 1 started".to_string()),
+        });
+    }
+    if prev.eng1_combustion && !curr.eng1_combustion {
+        let _ = app.emit("simconnect-flight-event", &FlightEvent {
+            event: "engine_stop".to_string(),
+            value: Some(1),
+            detail: Some("Engine 1 shutdown".to_string()),
+        });
+    }
+    if !prev.eng2_combustion && curr.eng2_combustion {
+        let _ = app.emit("simconnect-flight-event", &FlightEvent {
+            event: "engine_start".to_string(),
+            value: Some(2),
+            detail: Some("Engine 2 started".to_string()),
+        });
+    }
+    if prev.eng2_combustion && !curr.eng2_combustion {
+        let _ = app.emit("simconnect-flight-event", &FlightEvent {
+            event: "engine_stop".to_string(),
+            value: Some(2),
+            detail: Some("Engine 2 shutdown".to_string()),
+        });
+    }
+
+    if prev.gear_handle && !curr.gear_handle {
+        let _ = app.emit("simconnect-flight-event", &FlightEvent {
+            event: "gear_up".to_string(),
+            value: None,
+            detail: Some("Gear retracted".to_string()),
+        });
+    }
+    if !prev.gear_handle && curr.gear_handle {
+        let _ = app.emit("simconnect-flight-event", &FlightEvent {
+            event: "gear_down".to_string(),
+            value: None,
+            detail: Some("Gear extended".to_string()),
+        });
+    }
+
+    if !prev.on_ground && curr.on_ground {
+        let _ = app.emit("simconnect-flight-event", &FlightEvent {
+            event: "landing".to_string(),
+            value: Some(prev.vs_fpm),
+            detail: Some(format!("{} fpm", prev.vs_fpm)),
+        });
+    }
+
+    emit_light_event(app, "nav", prev.light_nav, curr.light_nav);
+    emit_light_event(app, "beacon", prev.light_beacon, curr.light_beacon);
+    emit_light_event(app, "landing", prev.light_landing, curr.light_landing);
+    emit_light_event(app, "taxi", prev.light_taxi, curr.light_taxi);
+    emit_light_event(app, "strobe", prev.light_strobe, curr.light_strobe);
+    emit_light_event(app, "logo", prev.light_logo, curr.light_logo);
+    emit_light_event(app, "wing", prev.light_wing, curr.light_wing);
+    emit_light_event(app, "recognition", prev.light_recognition, curr.light_recognition);
+}
+
+#[cfg(windows)]
+fn emit_light_event(app: &tauri::AppHandle, name: &str, prev: bool, curr: bool) {
+    if !prev && curr {
+        let _ = app.emit("simconnect-flight-event", &FlightEvent {
+            event: "light_on".to_string(),
+            value: None,
+            detail: Some(format!("{} lights ON", name)),
+        });
+    }
+    if prev && !curr {
+        let _ = app.emit("simconnect-flight-event", &FlightEvent {
+            event: "light_off".to_string(),
+            value: None,
+            detail: Some(format!("{} lights OFF", name)),
+        });
+    }
+}
+
+#[cfg(windows)]
 fn detect_phase_from(
     t: &Telemetry,
     current: &FlightPhase,
@@ -315,6 +466,10 @@ fn detect_phase_from(
 ) -> FlightPhase {
     if t.on_ground {
         if *was_airborne {
+            if *current != FlightPhase::Landed && *current != FlightPhase::TaxiIn && *current != FlightPhase::Parked {
+                *parked_timer = None;
+                return FlightPhase::Landed;
+            }
             if t.ground_speed_kts < 5 {
                 if let Some(timer) = parked_timer {
                     if timer.elapsed().as_secs() >= 30 {

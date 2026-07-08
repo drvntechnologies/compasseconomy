@@ -17,6 +17,22 @@ export interface SimTelemetry {
   on_ground: boolean;
   sim_rate: number;
   gear_handle: boolean;
+  eng1_combustion: boolean;
+  eng2_combustion: boolean;
+  light_nav: boolean;
+  light_beacon: boolean;
+  light_landing: boolean;
+  light_taxi: boolean;
+  light_strobe: boolean;
+  light_logo: boolean;
+  light_wing: boolean;
+  light_recognition: boolean;
+}
+
+export interface FlightEvent {
+  event: string;
+  value: number | null;
+  detail: string | null;
 }
 
 let isTauri = false;
