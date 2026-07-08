@@ -50,6 +50,8 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
   // Completing flight state
   const [completing, setCompleting] = useState<string | null>(null);
   const [engineHoursMap, setEngineHoursMap] = useState<Record<string, string>>({});
+  const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
+  const [cancelBlocked, setCancelBlocked] = useState<string | null>(null);
 
   // Auto-refresh
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
@@ -856,7 +858,27 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
     fetchAircraft();
   }
 
+  async function attemptCancelBooking(bookingId: string) {
+    setCancelBlocked(null);
+    // Check if there's an active ACARS flight that's airborne
+    const { data: activeAcars } = await supabase
+      .from('acars_flights')
+      .select('phase')
+      .eq('booking_id', bookingId)
+      .is('ended_at', null)
+      .limit(1);
+
+    const airbornePhases = ['climb', 'cruise', 'descent', 'approach'];
+    if (activeAcars && activeAcars.length > 0 && airbornePhases.includes(activeAcars[0].phase)) {
+      setCancelBlocked(bookingId);
+      return;
+    }
+
+    setCancelConfirmId(bookingId);
+  }
+
   async function cancelBooking(bookingId: string) {
+    setCancelConfirmId(null);
     setCompleting(bookingId);
     const booking = bookings.find(b => b.id === bookingId);
 
@@ -1363,14 +1385,19 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
                         <CheckCircle className="w-4 h-4" />
                         {completing === booking.id ? 'Completing...' : 'Flight Complete'}
                       </button>
-                      <button
-                        onClick={() => cancelBooking(booking.id)}
-                        disabled={completing === booking.id}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 text-slate-300 text-sm rounded-lg transition-all"
-                      >
-                        <XCircle className="w-4 h-4" />
-                        Cancel
-                      </button>
+                      <div className="border-t border-slate-700 pt-2 mt-1">
+                        <button
+                          onClick={() => attemptCancelBooking(booking.id)}
+                          disabled={completing === booking.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 text-xs rounded-lg transition-all"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                          Cancel Booking
+                        </button>
+                        {cancelBlocked === booking.id && (
+                          <p className="text-xs text-amber-400 mt-1 max-w-[220px]">Cannot cancel: aircraft is airborne. Use ACARS to manage active flights.</p>
+                        )}
+                      </div>
                     </div>
                     )}
                   </div>
@@ -1402,6 +1429,37 @@ export default function Dispatch({ airports, routes, currentUserId, isAdmin }: D
           />
         );
       })()}
+
+      {/* Cancel Confirmation Dialog */}
+      {cancelConfirmId && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-sm w-full shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
+                <AlertCircle className="w-5 h-5 text-red-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-white">Cancel Flight?</h3>
+            </div>
+            <p className="text-sm text-slate-300 mb-6">
+              This will release all passengers, cargo, gate assignments, and the aircraft. This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setCancelConfirmId(null)}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-medium rounded-lg transition-all"
+              >
+                Keep Flight
+              </button>
+              <button
+                onClick={() => cancelBooking(cancelConfirmId)}
+                className="px-4 py-2 bg-red-500 hover:bg-red-400 text-white text-sm font-semibold rounded-lg transition-all"
+              >
+                Yes, Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
