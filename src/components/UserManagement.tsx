@@ -254,7 +254,7 @@ export default function UserManagement() {
                   type="password"
                   value={newPassword}
                   onChange={e => setNewPassword(e.target.value)}
-                  placeholder="Minimum 6 characters"
+                  placeholder="Min 8 chars, uppercase, lowercase, number"
                   className="w-full px-3 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500 focus:ring-2 focus:ring-sky-500/40 focus:border-sky-500 transition-all"
                   autoFocus
                 />
@@ -281,7 +281,7 @@ export default function UserManagement() {
                 </button>
                 <button
                   type="submit"
-                  disabled={passwordLoading || newPassword.length < 6}
+                  disabled={passwordLoading || newPassword.length < 8}
                   className="flex-1 py-2.5 bg-sky-500 hover:bg-sky-400 disabled:bg-slate-600 disabled:text-slate-400 text-white text-sm font-semibold rounded-lg transition-all"
                 >
                   {passwordLoading ? 'Updating...' : 'Set Password'}

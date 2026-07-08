@@ -61,7 +61,7 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
         }
         return result;
       }
-    } catch {}
+    } catch (e) { console.warn('[ACARS] Failed to parse checklist state:', e); }
     return {};
   });
   const [assignedGate, setAssignedGate] = useState<Gate | null>(null);
@@ -121,7 +121,7 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
             if (data.latitude !== 0 || data.longitude !== 0) {
               setLiveTelemetry(data);
             }
-          } catch {}
+          } catch (e) { console.warn('[ACARS] Telemetry parse error:', e); }
         }
       };
       telemetryInterval = window.setInterval(pollTelemetry, 1000);
@@ -135,7 +135,7 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
             if (s.phase && FLIGHT_PHASES.includes(s.phase as FlightPhase)) {
               setLivePhase(s.phase as FlightPhase);
             }
-          } catch {}
+          } catch (e) { console.warn('[ACARS] Status parse error:', e); }
         }
       };
       pollStatus();
@@ -385,12 +385,19 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
 
     if (!bestGate) { setAssignedGate(null); setGateAssigning(false); return; }
 
-    await supabase.from('gates').update({
+    // Use status='open' filter to prevent race condition (only updates if still open)
+    const { data: updatedGates, error: gateErr } = await supabase.from('gates').update({
       status: 'occupied',
       assigned_aircraft_id: booking.aircraft_id,
       assigned_booking_id: booking.id,
       occupied_since: new Date().toISOString(),
-    }).eq('id', bestGate.id);
+    }).eq('id', bestGate.id).eq('status', 'open').select();
+
+    if (gateErr || !updatedGates || updatedGates.length === 0) {
+      // Gate was claimed by someone else, try assignment again
+      setGateAssigning(false);
+      return;
+    }
 
     setAssignedGate({ ...bestGate, status: 'occupied', assigned_aircraft_id: booking.aircraft_id, assigned_booking_id: booking.id });
     setGateAssigning(false);
@@ -575,7 +582,11 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
       });
     }
 
-    const ac = booking.aircraft_id ? aircraftMap[booking.aircraft_id] : null;
+    let ac = booking.aircraft_id ? aircraftMap[booking.aircraft_id] : null;
+    if (!ac && booking.aircraft_id) {
+      const { data } = await supabase.from('aircraft').select('*').eq('id', booking.aircraft_id).maybeSingle();
+      if (data) ac = data;
+    }
     if (ac && ac.hourly_cost_usd > 0) {
       const engineCost = hours * ac.hourly_cost_usd;
       balanceChange -= engineCost;
@@ -600,7 +611,7 @@ function Acars({ currentUserId, simbriefId, routes, onTelemetryUpdate }: AcarsPr
       flight_number: booking.flight_number,
       departure_icao: booking.departure_icao,
       arrival_icao: booking.arrival_icao,
-      pax_count: booking.pax_count,
+      pax_count: arrivedPaxCount,
       user_id: booking.user_id,
     });
 

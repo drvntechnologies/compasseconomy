@@ -756,7 +756,7 @@ export default function Dashboard({ airports, routes, userRole }: DashboardProps
       </div>
 
       {/* Airport Detail Modal */}
-      {showModal && selectedAirport && (
+      {showModal && selectedAirport && airports.find(a => a.icao_code === selectedAirport) && (
         <AirportDetailModal
           airport={airports.find(a => a.icao_code === selectedAirport)!}
           airports={airports}

@@ -14,8 +14,14 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !serviceRoleKey) {
+      return new Response(
+        JSON.stringify({ error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     // Find all per-hour gates that are currently occupied
@@ -29,10 +35,7 @@ Deno.serve(async (req: Request) => {
     if (gatesError) {
       return new Response(
         JSON.stringify({ error: gatesError.message }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -50,14 +53,11 @@ Deno.serve(async (req: Request) => {
     for (const gate of occupiedGates) {
       if (!gate.hourly_price || gate.hourly_price <= 0) continue;
 
-      const billingStart = gate.last_billed_at || gate.occupied_since;
+      const billingStart = gate.last_billed_at ?? gate.occupied_since;
       const minutesParked = (now.getTime() - new Date(billingStart).getTime()) / 60000;
 
-      // Only bill if at least 10 minutes have accumulated
       if (minutesParked < 10) continue;
 
-      // Round down to complete 10-minute blocks for periodic billing
-      // (on departure, we ceil - but for periodic we only bill complete blocks)
       const tenMinBlocks = Math.floor(minutesParked / 10);
       if (tenMinBlocks <= 0) continue;
 
@@ -65,40 +65,40 @@ Deno.serve(async (req: Request) => {
       totalBilled += fee;
       gatesBilled += 1;
 
-      // Insert gate fee transaction
-      await supabase.from("financial_transactions").insert({
+      const { error: txErr } = await supabase.from("financial_transactions").insert({
         type: "gate_fee",
         amount: -fee,
         description: `Gate ${gate.gate_number} at ${gate.airport_icao}: ${tenMinBlocks * 10}min parked @ $${gate.hourly_price}/hr (daily billing)`,
         reference_id: gate.id,
       });
 
-      // Update last_billed_at to the cutoff point (not now, to avoid billing partial blocks)
+      if (txErr) {
+        console.error(`Failed to insert gate fee for ${gate.gate_number}:`, txErr.message);
+        totalBilled -= fee;
+        gatesBilled -= 1;
+        continue;
+      }
+
       const billedUpTo = new Date(
         new Date(billingStart).getTime() + tenMinBlocks * 10 * 60000
       ).toISOString();
-      await supabase
+      const { error: updateErr } = await supabase
         .from("gates")
         .update({ last_billed_at: billedUpTo })
         .eq("id", gate.id);
+
+      if (updateErr) {
+        console.error(`Failed to update last_billed_at for ${gate.gate_number}:`, updateErr.message);
+      }
     }
 
-    // Deduct from airline balance
+    // Atomically deduct from airline balance
     if (totalBilled > 0) {
-      const { data: financials } = await supabase
-        .from("airline_financials")
-        .select("*")
-        .eq("id", 1)
-        .maybeSingle();
-
-      if (financials) {
-        await supabase
-          .from("airline_financials")
-          .update({
-            balance_usd: financials.balance_usd - totalBilled,
-            updated_at: now.toISOString(),
-          })
-          .eq("id", 1);
+      const { error: rpcErr } = await supabase.rpc("adjust_balance", {
+        amount_delta: -totalBilled,
+      });
+      if (rpcErr) {
+        console.error("Failed to adjust balance:", rpcErr.message);
       }
     }
 
@@ -114,10 +114,7 @@ Deno.serve(async (req: Request) => {
   } catch (err) {
     return new Response(
       JSON.stringify({ error: (err as Error).message }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
