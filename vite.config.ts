@@ -7,6 +7,14 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
+  build: {
+    rollupOptions: {
+      external: [
+        '@tauri-apps/plugin-updater',
+        '@tauri-apps/plugin-process',
+      ],
+    },
+  },
   server: {
     port: 5173,
     strictPort: true,
