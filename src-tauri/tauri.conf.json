@@ -47,7 +47,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "REPLACE_WITH_YOUR_PUBLIC_KEY",
+      "pubkey": "RWTGV66jKMWEeuFTypNsoZ4d1MLKe7CcB+30W5syf/3CfHDNLYHZlOm",
       "endpoints": [
         "https://bgbfknpzkidqodagqvna.supabase.co/functions/v1/check-update?target={{target}}&arch={{arch}}&current_version={{current_version}}"
       ],
