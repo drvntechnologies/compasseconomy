@@ -1,0 +1,2 @@
+cargo:rustc-link-search=native=C:\Compass GitHub\compasseconomy\src-tauri\target\release\build\webview2-com-sys-b50ae3ae6cd2c3c3\out\x64
+cargo:rustc-link-lib=advapi32

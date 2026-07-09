@@ -1,0 +1,14 @@
+C:\Compass GitHub\compasseconomy\src-tauri\target\release\deps\clang_sys-c320a73df0808854.d: C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\lib.rs C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\support.rs C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\link.rs C:\Compass\ GitHub\compasseconomy\src-tauri\target\release\build\clang-sys-bb91c7386dd9220f\out/macros.rs C:\Compass\ GitHub\compasseconomy\src-tauri\target\release\build\clang-sys-bb91c7386dd9220f\out/common.rs C:\Compass\ GitHub\compasseconomy\src-tauri\target\release\build\clang-sys-bb91c7386dd9220f\out/dynamic.rs
+
+C:\Compass GitHub\compasseconomy\src-tauri\target\release\deps\libclang_sys-c320a73df0808854.rlib: C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\lib.rs C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\support.rs C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\link.rs C:\Compass\ GitHub\compasseconomy\src-tauri\target\release\build\clang-sys-bb91c7386dd9220f\out/macros.rs C:\Compass\ GitHub\compasseconomy\src-tauri\target\release\build\clang-sys-bb91c7386dd9220f\out/common.rs C:\Compass\ GitHub\compasseconomy\src-tauri\target\release\build\clang-sys-bb91c7386dd9220f\out/dynamic.rs
+
+C:\Compass GitHub\compasseconomy\src-tauri\target\release\deps\libclang_sys-c320a73df0808854.rmeta: C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\lib.rs C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\support.rs C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\link.rs C:\Compass\ GitHub\compasseconomy\src-tauri\target\release\build\clang-sys-bb91c7386dd9220f\out/macros.rs C:\Compass\ GitHub\compasseconomy\src-tauri\target\release\build\clang-sys-bb91c7386dd9220f\out/common.rs C:\Compass\ GitHub\compasseconomy\src-tauri\target\release\build\clang-sys-bb91c7386dd9220f\out/dynamic.rs
+
+C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\lib.rs:
+C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\support.rs:
+C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\clang-sys-1.8.1\src\link.rs:
+C:\Compass\ GitHub\compasseconomy\src-tauri\target\release\build\clang-sys-bb91c7386dd9220f\out/macros.rs:
+C:\Compass\ GitHub\compasseconomy\src-tauri\target\release\build\clang-sys-bb91c7386dd9220f\out/common.rs:
+C:\Compass\ GitHub\compasseconomy\src-tauri\target\release\build\clang-sys-bb91c7386dd9220f\out/dynamic.rs:
+
+# env-dep:OUT_DIR=C:\\Compass GitHub\\compasseconomy\\src-tauri\\target\\release\\build\\clang-sys-bb91c7386dd9220f\\out

@@ -1,0 +1,14 @@
+C:\Compass GitHub\compasseconomy\src-tauri\target\release\deps\thiserror-88715ed4ca49df1a.d: C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\lib.rs C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\aserror.rs C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\display.rs C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\var.rs C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\private.rs C:\Compass\ GitHub\compasseconomy\src-tauri\target\release\build\thiserror-2ae12ba30e8c4c06\out/private.rs
+
+C:\Compass GitHub\compasseconomy\src-tauri\target\release\deps\libthiserror-88715ed4ca49df1a.rlib: C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\lib.rs C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\aserror.rs C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\display.rs C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\var.rs C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\private.rs C:\Compass\ GitHub\compasseconomy\src-tauri\target\release\build\thiserror-2ae12ba30e8c4c06\out/private.rs
+
+C:\Compass GitHub\compasseconomy\src-tauri\target\release\deps\libthiserror-88715ed4ca49df1a.rmeta: C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\lib.rs C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\aserror.rs C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\display.rs C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\var.rs C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\private.rs C:\Compass\ GitHub\compasseconomy\src-tauri\target\release\build\thiserror-2ae12ba30e8c4c06\out/private.rs
+
+C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\lib.rs:
+C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\aserror.rs:
+C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\display.rs:
+C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\var.rs:
+C:\Users\camer\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\private.rs:
+C:\Compass\ GitHub\compasseconomy\src-tauri\target\release\build\thiserror-2ae12ba30e8c4c06\out/private.rs:
+
+# env-dep:OUT_DIR=C:\\Compass GitHub\\compasseconomy\\src-tauri\\target\\release\\build\\thiserror-2ae12ba30e8c4c06\\out
