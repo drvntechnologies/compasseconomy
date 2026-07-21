@@ -21,3 +21,10 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Build artifacts
+src-tauri/target/
+
+# Signing keys
+*.key
+*.key.pub
