@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Airport, Route } from '../lib/types';
-import { Upload, Plus, Trash2, MapPin, ToggleLeft, ToggleRight, Plane, AlertCircle, Users, BarChart3, Power, Filter, RefreshCw } from 'lucide-react';
+import { Upload, Plus, Trash2, MapPin, ToggleLeft, ToggleRight, Plane, AlertCircle, Users, BarChart3, Power, Filter, RefreshCw, Download, Database } from 'lucide-react';
 import UserManagement from './UserManagement';
 import Analytics from './Analytics';
 
@@ -11,7 +11,7 @@ interface AdminPanelProps {
   onRefresh: () => void;
 }
 
-type TabId = 'airports' | 'routes' | 'upload' | 'users' | 'analytics';
+type TabId = 'airports' | 'routes' | 'upload' | 'users' | 'analytics' | 'export';
 
 export default function AdminPanel({ airports, routes, onRefresh }: AdminPanelProps) {
   const [activeTab, setActiveTab] = useState<TabId>('airports');
@@ -29,6 +29,8 @@ export default function AdminPanel({ airports, routes, onRefresh }: AdminPanelPr
   const [newRoute, setNewRoute] = useState({ flight_number: '', departure_icao: '', arrival_icao: '', duration_minutes: 0, airframes: '', flight_type: 'pax', cargo_price_per_kg: 0.45 });
   const [regenerating, setRegenerating] = useState(false);
   const [regenMessage, setRegenMessage] = useState('');
+  const [exportingKey, setExportingKey] = useState<string | null>(null);
+  const [exportError, setExportError] = useState('');
 
   async function addAirport(e: React.FormEvent) {
     e.preventDefault();
@@ -262,6 +264,67 @@ export default function AdminPanel({ airports, routes, onRefresh }: AdminPanelPr
     return result;
   }
 
+  function escapeCsvValue(value: unknown): string {
+    if (value === null || value === undefined) return '';
+    const str = typeof value === 'object' ? JSON.stringify(value) : String(value);
+    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  }
+
+  function toCSV(rows: Record<string, unknown>[]): string {
+    if (rows.length === 0) return '';
+    const headers = Object.keys(rows[0]);
+    const headerLine = headers.map(escapeCsvValue).join(',');
+    const dataLines = rows.map(row => headers.map(h => escapeCsvValue(row[h])).join(','));
+    return [headerLine, ...dataLines].join('\n');
+  }
+
+  function downloadCSV(csv: string, filename: string) {
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  async function exportTable(key: string, table: string, filename: string) {
+    setExportingKey(key);
+    setExportError('');
+    try {
+      const { data, error } = await supabase.from(table).select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        setExportError(`No ${table} records found to export.`);
+        return;
+      }
+      downloadCSV(toCSV(data as Record<string, unknown>[]), filename);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Export failed');
+    } finally {
+      setExportingKey(null);
+    }
+  }
+
+  function exportLocalData(key: string, rows: Record<string, unknown>[], filename: string) {
+    setExportingKey(key);
+    setExportError('');
+    try {
+      if (rows.length === 0) {
+        setExportError('No records to export.');
+        return;
+      }
+      downloadCSV(toCSV(rows), filename);
+    } finally {
+      setExportingKey(null);
+    }
+  }
+
   function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -291,6 +354,7 @@ export default function AdminPanel({ airports, routes, onRefresh }: AdminPanelPr
     { id: 'users', label: 'Users', icon: Users },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'upload', label: 'CSV Upload', icon: Upload },
+    { id: 'export', label: 'Export', icon: Download },
   ];
 
   return (
@@ -694,6 +758,132 @@ export default function AdminPanel({ airports, routes, onRefresh }: AdminPanelPr
               {uploadError}
             </div>
           )}
+        </div>
+      )}
+
+      {activeTab === 'export' && (
+        <div className="space-y-4">
+          <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+            <div className="flex items-center gap-3 mb-2">
+              <Database className="w-5 h-5 text-sky-400" />
+              <h3 className="text-white font-semibold">Export Data to CSV</h3>
+            </div>
+            <p className="text-slate-400 text-sm mb-6">
+              Download a CSV snapshot of your airline data. Files are generated from the live Supabase tables.
+            </p>
+
+            {exportError && (
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />{exportError}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <button
+                onClick={() => exportLocalData('airports', airports as unknown as Record<string, unknown>[], `airports_${new Date().toISOString().slice(0,10)}.csv`)}
+                disabled={exportingKey === 'airports'}
+                className="flex items-center gap-3 p-4 bg-slate-900/50 hover:bg-slate-700/40 border border-slate-700 rounded-lg text-left transition-all disabled:opacity-50"
+              >
+                <MapPin className="w-5 h-5 text-sky-400 shrink-0" />
+                <div>
+                  <div className="text-white text-sm font-medium">Airports</div>
+                  <div className="text-slate-500 text-xs">{airports.length} records</div>
+                </div>
+                {exportingKey === 'airports' ? <RefreshCw className="w-4 h-4 ml-auto animate-spin text-slate-400" /> : <Download className="w-4 h-4 ml-auto text-slate-400" />}
+              </button>
+
+              <button
+                onClick={() => exportLocalData('routes', routes as unknown as Record<string, unknown>[], `routes_${new Date().toISOString().slice(0,10)}.csv`)}
+                disabled={exportingKey === 'routes'}
+                className="flex items-center gap-3 p-4 bg-slate-900/50 hover:bg-slate-700/40 border border-slate-700 rounded-lg text-left transition-all disabled:opacity-50"
+              >
+                <Plane className="w-5 h-5 text-sky-400 shrink-0" />
+                <div>
+                  <div className="text-white text-sm font-medium">Routes</div>
+                  <div className="text-slate-500 text-xs">{routes.length} records</div>
+                </div>
+                {exportingKey === 'routes' ? <RefreshCw className="w-4 h-4 ml-auto animate-spin text-slate-400" /> : <Download className="w-4 h-4 ml-auto text-slate-400" />}
+              </button>
+
+              <button
+                onClick={() => exportTable('gates', 'gates', `gates_${new Date().toISOString().slice(0,10)}.csv`)}
+                disabled={exportingKey === 'gates'}
+                className="flex items-center gap-3 p-4 bg-slate-900/50 hover:bg-slate-700/40 border border-slate-700 rounded-lg text-left transition-all disabled:opacity-50"
+              >
+                <MapPin className="w-5 h-5 text-emerald-400 shrink-0" />
+                <div>
+                  <div className="text-white text-sm font-medium">Gates</div>
+                  <div className="text-slate-500 text-xs">Leased &amp; assigned gates</div>
+                </div>
+                {exportingKey === 'gates' ? <RefreshCw className="w-4 h-4 ml-auto animate-spin text-slate-400" /> : <Download className="w-4 h-4 ml-auto text-slate-400" />}
+              </button>
+
+              <button
+                onClick={() => exportTable('aircraft', 'aircraft', `fleet_${new Date().toISOString().slice(0,10)}.csv`)}
+                disabled={exportingKey === 'aircraft'}
+                className="flex items-center gap-3 p-4 bg-slate-900/50 hover:bg-slate-700/40 border border-slate-700 rounded-lg text-left transition-all disabled:opacity-50"
+              >
+                <Plane className="w-5 h-5 text-amber-400 shrink-0" />
+                <div>
+                  <div className="text-white text-sm font-medium">Fleet / Aircraft</div>
+                  <div className="text-slate-500 text-xs">All airframes</div>
+                </div>
+                {exportingKey === 'aircraft' ? <RefreshCw className="w-4 h-4 ml-auto animate-spin text-slate-400" /> : <Download className="w-4 h-4 ml-auto text-slate-400" />}
+              </button>
+
+              <button
+                onClick={() => exportTable('bookings', 'flight_bookings', `flight_bookings_${new Date().toISOString().slice(0,10)}.csv`)}
+                disabled={exportingKey === 'bookings'}
+                className="flex items-center gap-3 p-4 bg-slate-900/50 hover:bg-slate-700/40 border border-slate-700 rounded-lg text-left transition-all disabled:opacity-50"
+              >
+                <Users className="w-5 h-5 text-violet-300 shrink-0" />
+                <div>
+                  <div className="text-white text-sm font-medium">Flight Bookings</div>
+                  <div className="text-slate-500 text-xs">Passenger &amp; cargo bookings</div>
+                </div>
+                {exportingKey === 'bookings' ? <RefreshCw className="w-4 h-4 ml-auto animate-spin text-slate-400" /> : <Download className="w-4 h-4 ml-auto text-slate-400" />}
+              </button>
+
+              <button
+                onClick={() => exportTable('transactions', 'financial_transactions', `financial_transactions_${new Date().toISOString().slice(0,10)}.csv`)}
+                disabled={exportingKey === 'transactions'}
+                className="flex items-center gap-3 p-4 bg-slate-900/50 hover:bg-slate-700/40 border border-slate-700 rounded-lg text-left transition-all disabled:opacity-50"
+              >
+                <BarChart3 className="w-5 h-5 text-emerald-300 shrink-0" />
+                <div>
+                  <div className="text-white text-sm font-medium">Financial Transactions</div>
+                  <div className="text-slate-500 text-xs">Revenue &amp; expenses ledger</div>
+                </div>
+                {exportingKey === 'transactions' ? <RefreshCw className="w-4 h-4 ml-auto animate-spin text-slate-400" /> : <Download className="w-4 h-4 ml-auto text-slate-400" />}
+              </button>
+
+              <button
+                onClick={() => exportTable('notams', 'notams', `notams_${new Date().toISOString().slice(0,10)}.csv`)}
+                disabled={exportingKey === 'notams'}
+                className="flex items-center gap-3 p-4 bg-slate-900/50 hover:bg-slate-700/40 border border-slate-700 rounded-lg text-left transition-all disabled:opacity-50"
+              >
+                <AlertCircle className="w-5 h-5 text-amber-300 shrink-0" />
+                <div>
+                  <div className="text-white text-sm font-medium">NOTAMs</div>
+                  <div className="text-slate-500 text-xs">Active notices</div>
+                </div>
+                {exportingKey === 'notams' ? <RefreshCw className="w-4 h-4 ml-auto animate-spin text-slate-400" /> : <Download className="w-4 h-4 ml-auto text-slate-400" />}
+              </button>
+
+              <button
+                onClick={() => exportTable('profiles', 'profiles', `users_${new Date().toISOString().slice(0,10)}.csv`)}
+                disabled={exportingKey === 'profiles'}
+                className="flex items-center gap-3 p-4 bg-slate-900/50 hover:bg-slate-700/40 border border-slate-700 rounded-lg text-left transition-all disabled:opacity-50"
+              >
+                <Users className="w-5 h-5 text-sky-300 shrink-0" />
+                <div>
+                  <div className="text-white text-sm font-medium">User Profiles</div>
+                  <div className="text-slate-500 text-xs">Pilots &amp; roles</div>
+                </div>
+                {exportingKey === 'profiles' ? <RefreshCw className="w-4 h-4 ml-auto animate-spin text-slate-400" /> : <Download className="w-4 h-4 ml-auto text-slate-400" />}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
