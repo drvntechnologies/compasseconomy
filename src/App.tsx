@@ -1,767 +1,529 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase } from './lib/supabase';
-import type { Profile, Airport, Route } from './lib/types';
-import { FLIGHT_PHASES } from './lib/types';
-import type { FlightPhase } from './lib/types';
-import type { SimTelemetry, SimConnectStatus } from './lib/tauri-bridge';
-import { getIsTauri, invokeCommand, listenEvent } from './lib/tauri-bridge';
-import AuthPage from './components/AuthPage';
-import AdminPanel from './components/AdminPanel';
-import Dashboard from './components/Dashboard';
-import RoutePlanner from './components/RoutePlanner';
-import CapacityChecker from './components/CapacityChecker';
-import Dispatch from './components/Dispatch';
-import Fleet from './components/Fleet';
-import Gates from './components/Gates';
-import Finances from './components/Finances';
-import Acars from './components/Acars';
-import LiveMap from './components/LiveMap';
-import SimConnectIndicator from './components/SimConnectIndicator';
-import AppUpdater from './components/AppUpdater';
-import { Plane, LogOut, LayoutDashboard, Settings, Users, Navigation, Clock, Gauge, Radio, Radar, PanelLeftClose, PanelLeft, DoorOpen, DollarSign, KeyRound, Sun, Moon, Monitor, Laptop, Menu, X, ChevronDown, Map } from 'lucide-react';
-import type { Session } from '@supabase/supabase-js';
+import { supabase, signInWithPassword, signUpWithPassword, resetPasswordForEmail, updatePassword } from './lib/supabase';
+import type { Airport, Route, Profile, AcarsFlight, FlightPosition } from './lib/types';
+import { Dashboard } from './components/Dashboard';
+import { Dispatch } from './components/Dispatch';
+import { Fleet } from './components/Fleet';
+import { Gates } from './components/Gates';
+import { Finances } from './components/Finances';
+import { Acars } from './components/Acars';
+import { AdminPanel } from './components/AdminPanel';
+import { Analytics } from './components/Analytics';
+import { RouteNetwork } from './components/RouteNetwork';
+import { AuthPage } from './components/AuthPage';
+import { AppUpdater } from './components/AppUpdater';
+import { SimConnectIndicator } from './components/SimConnectIndicator';
+import { CapacityChecker } from './components/CapacityChecker';
+import { RoutePlanner } from './components/RoutePlanner';
+import { LiveMap } from './components/LiveMap';
+import {
+  LayoutDashboard, Plane, Building2, DollarSign, Radio, Settings, LogOut,
+  Users, BarChart3, Map, Navigation, ClipboardList, Calculator, Globe, Moon, Sun, Clock, User as UserIcon, KeyRound
+} from 'lucide-react';
+
+type ActiveView =
+  | 'dashboard' | 'dispatch' | 'fleet' | 'gates' | 'finances'
+  | 'acars' | 'admin' | 'analytics' | 'capacity' | 'routeplanner' | 'livemap' | 'routenetwork';
 
 export default function App() {
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<null | { user: { id: string; email: string } }>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [airports, setAirports] = useState<Airport[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
-  const [activeView, setActiveView] = useState<'dashboard' | 'dispatch' | 'planner' | 'capacity' | 'fleet' | 'gates' | 'finances' | 'acars' | 'livemap' | 'admin'>('dashboard');
+  const [activeView, setActiveView] = useState<ActiveView>('dashboard');
   const [loading, setLoading] = useState(true);
-  const [now, setNow] = useState(new Date());
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [showPasswordReset, setShowPasswordReset] = useState(false);
   const [showPilotSettings, setShowPilotSettings] = useState(false);
-  const [simbriefInput, setSimbriefInput] = useState('');
-  const [simbriefSaving, setSimbriefSaving] = useState(false);
-  const [simbriefSaved, setSimbriefSaved] = useState(false);
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
+  const [simConnected, setSimConnected] = useState(false);
+  const [telemetry, setTelemetry] = useState<{ lat: number; lon: number; alt: number; spd: number; hdg: number; onGround: boolean; vs: number; gnd: number } | null>(null);
+  const [activeFlightId, setActiveFlightId] = useState<string | null>(null);
+  const [acarsFlights, setAcarsFlights] = useState<AcarsFlight[]>([]);
+  const [flightPositions, setFlightPositions] = useState<Record<string, FlightPosition>>({});
+  const [darkMode, setDarkMode] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [pilotName, setPilotName] = useState('');
+  const [pilotId, setPilotId] = useState('');
+  const [pilotEmail, setPilotEmail] = useState('');
+  const [simbriefId, setSimbriefId] = useState('');
+  const [savingPilot, setSavingPilot] = useState(false);
+  const [pilotSaveMsg, setPilotSaveMsg] = useState('');
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetMsg, setResetMsg] = useState('');
+  const [resetErr, setResetErr] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [resetError, setResetError] = useState('');
-  const [resetSuccess, setResetSuccess] = useState(false);
-  const [resetting, setResetting] = useState(false);
-  const [darkMode, setDarkMode] = useState(() => {
-    const saved = localStorage.getItem('theme');
-    return saved ? saved === 'dark' : true;
-  });
-  const [win98Mode, setWin98Mode] = useState(() => {
-    return localStorage.getItem('win98') === 'true';
-  });
-  const [win7Mode, setWin7Mode] = useState(() => {
-    return localStorage.getItem('win7') === 'true';
-  });
-  const intervalRef = useRef<number | null>(null);
-  const [flightOpsOpen, setFlightOpsOpen] = useState(false);
-  const [paxOpsOpen, setPaxOpsOpen] = useState(false);
-  const [liveTelemetryForMap, setLiveTelemetryForMap] = useState<{ telemetry: SimTelemetry; phase: string; flightId: string } | null>(null);
+  const [passwordUpdateMsg, setPasswordUpdateMsg] = useState('');
+  const [passwordUpdateErr, setPasswordUpdateErr] = useState('');
+  const telemetryIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const handleTelemetryUpdate = useCallback((telemetry: SimTelemetry, phase: string, flightId: string) => {
-    setLiveTelemetryForMap({ telemetry, phase, flightId });
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session as typeof session);
+      if (!data.session) setLoading(false);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s as typeof session);
+      if (!s) { setProfile(null); setLoading(false); setActiveView('dashboard'); }
+    });
+    return () => sub.subscription.unsubscribe();
   }, []);
 
-  // App-level telemetry polling so LiveMap gets updates even when ACARS tab isn't active
-  const [appIsTauri] = useState(() => getIsTauri());
-  const [appLiveTelemetry, setAppLiveTelemetry] = useState<SimTelemetry | null>(null);
-  const [appLivePhase, setAppLivePhase] = useState<string | null>(null);
-  const [appActiveFlightId, setAppActiveFlightId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!appIsTauri || !session) return;
-    let telemetryInterval: number | null = null;
-    let statusInterval: number | null = null;
-    let unlistenPhase: (() => void) | null = null;
-
-    (async () => {
-      unlistenPhase = await listenEvent<string>('simconnect-phase', (payload) => {
-        if (FLIGHT_PHASES.includes(payload as FlightPhase)) {
-          setAppLivePhase(payload);
-        }
-      });
-
-      const pollTelemetry = async () => {
-        const raw = await invokeCommand<string>('get_current_telemetry');
-        if (raw) {
-          try {
-            const data = JSON.parse(raw) as SimTelemetry;
-            if (data.latitude !== 0 || data.longitude !== 0) {
-              setAppLiveTelemetry(data);
-            }
-          } catch {}
-        }
-      };
-      telemetryInterval = window.setInterval(pollTelemetry, 2000);
-
-      const pollStatus = async () => {
-        const raw = await invokeCommand<string>('get_simconnect_status');
-        if (raw) {
-          try {
-            const s = JSON.parse(raw) as SimConnectStatus;
-            if (s.phase && FLIGHT_PHASES.includes(s.phase as FlightPhase)) {
-              setAppLivePhase(s.phase);
-            }
-          } catch {}
-        }
-      };
-      statusInterval = window.setInterval(pollStatus, 5000);
-    })();
-
-    return () => {
-      unlistenPhase?.();
-      if (telemetryInterval) clearInterval(telemetryInterval);
-      if (statusInterval) clearInterval(statusInterval);
-    };
-  }, [appIsTauri, session]);
-
-  // Track the current user's active ACARS flight ID for map overlay
-  useEffect(() => {
-    if (!session) return;
-    const fetchActiveId = async () => {
-      const { data } = await supabase
-        .from('acars_flights')
-        .select('id')
-        .eq('user_id', session.user.id)
-        .is('ended_at', null)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      setAppActiveFlightId(data?.id || null);
-    };
-    fetchActiveId();
-    const interval = setInterval(fetchActiveId, 30000);
-    return () => clearInterval(interval);
-  }, [session]);
-
-  // Derive the combined live telemetry for the map (from either ACARS callback or app-level polling)
-  const mapLiveTelemetry = liveTelemetryForMap || (
-    appLiveTelemetry && appActiveFlightId && appLivePhase
-      ? { telemetry: appLiveTelemetry, phase: appLivePhase, flightId: appActiveFlightId }
-      : null
-  );
-
-  useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+  const fetchProfile = useCallback(async (uid: string) => {
+    const { data } = await supabase.from('profiles').select('*').eq('id', uid).maybeSingle();
+    if (data) {
+      setProfile(data as Profile);
+      setPilotName(data.pilot_name || '');
+      setPilotId(data.pilot_id || '');
+      setPilotEmail(data.email || '');
+      setSimbriefId(data.simbrief_id || '');
     }
-    localStorage.setItem('theme', darkMode ? 'dark' : 'light');
-  }, [darkMode]);
-
-  useEffect(() => {
-    if (win98Mode) {
-      document.documentElement.classList.add('win98');
-    } else {
-      document.documentElement.classList.remove('win98');
-    }
-    localStorage.setItem('win98', win98Mode ? 'true' : 'false');
-  }, [win98Mode]);
-
-  useEffect(() => {
-    if (win7Mode) {
-      document.documentElement.classList.add('win7');
-    } else {
-      document.documentElement.classList.remove('win7');
-    }
-    localStorage.setItem('win7', win7Mode ? 'true' : 'false');
-  }, [win7Mode]);
-
-  useEffect(() => {
-    intervalRef.current = window.setInterval(() => setNow(new Date()), 1000);
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) fetchProfile(session.user.id);
+    if (session?.user?.id) fetchProfile(session.user.id);
+  }, [session, fetchProfile]);
+
+  const fetchAirports = useCallback(async () => {
+    const { data } = await supabase.from('airports').select('*').order('icao_code');
+    if (data) setAirports(data as Airport[]);
+  }, []);
+
+  const fetchRoutes = useCallback(async () => {
+    const { data } = await supabase.from('routes').select('*').order('flight_number');
+    if (data) setRoutes(data as Route[]);
+  }, []);
+
+  const refreshData = useCallback(() => {
+    fetchAirports();
+    fetchRoutes();
+  }, [fetchAirports, fetchRoutes]);
+
+  useEffect(() => {
+    if (profile) {
+      refreshData();
       setLoading(false);
-    });
+    }
+  }, [profile, refreshData]);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setSession(session);
-      if (event === 'PASSWORD_RECOVERY') {
-        setShowPasswordReset(true);
+  // SimConnect telemetry polling
+  useEffect(() => {
+    if (activeView !== 'acars' && activeView !== 'livemap') {
+      if (telemetryIntervalRef.current) {
+        clearInterval(telemetryIntervalRef.current);
+        telemetryIntervalRef.current = null;
       }
-      if (session) {
-        (async () => {
-          await fetchProfile(session.user.id);
-          // Push refreshed token to Rust for position reporting
-          if (appIsTauri && (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN')) {
-            await invokeCommand('update_flight_token', {
-              supabaseToken: session.access_token,
-            });
-          }
-        })();
-      } else {
-        setProfile(null);
+      return;
+    }
+    const poll = async () => {
+      try {
+        const res = await fetch('http://127.0.0.1:41850/telemetry');
+        if (res.ok) {
+          const data = await res.json();
+          setTelemetry(data);
+          setSimConnected(true);
+        } else {
+          setSimConnected(false);
+        }
+      } catch {
+        setSimConnected(false);
       }
-    });
+    };
+    poll();
+    telemetryIntervalRef.current = setInterval(poll, 2000);
+    return () => {
+      if (telemetryIntervalRef.current) clearInterval(telemetryIntervalRef.current);
+    };
+  }, [activeView]);
 
-    return () => subscription.unsubscribe();
+  // ACARS flights subscription
+  useEffect(() => {
+    if (!profile) return;
+    const channel = supabase
+      .channel('acars-flights')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'acars_flights' }, () => {
+        supabase.from('acars_flights').select('*').order('created_at', { ascending: false }).then(({ data }) => {
+          if (data) setAcarsFlights(data as AcarsFlight[]);
+        });
+      })
+      .subscribe();
+    supabase.from('acars_flights').select('*').order('created_at', { ascending: false }).then(({ data }) => {
+      if (data) setAcarsFlights(data as AcarsFlight[]);
+    });
+    return () => { supabase.removeChannel(channel); };
+  }, [profile]);
+
+  // Flight positions subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel('flight-positions')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'flight_positions' }, (payload) => {
+        const pos = payload.new as FlightPosition;
+        setFlightPositions(prev => ({ ...prev, [pos.flight_id]: pos }));
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   useEffect(() => {
-    if (session) {
-      fetchAirportsAndRoutes();
-    }
-  }, [session]);
+    const t = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
-  async function fetchProfile(userId: string) {
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-    if (data) setProfile(data);
-  }
-
-  async function fetchAirportsAndRoutes() {
-    const [airportsRes, routesRes] = await Promise.all([
-      supabase.from('airports').select('*').order('icao_code'),
-      supabase.from('routes').select('*').order('flight_number'),
-    ]);
-    if (airportsRes.data) setAirports(airportsRes.data);
-    if (routesRes.data) setRoutes(routesRes.data);
-  }
-
-  async function handleSignOut() {
-    await supabase.auth.signOut();
-    setSession(null);
-    setProfile(null);
-  }
-
-  async function handlePasswordUpdate(e: React.FormEvent) {
-    e.preventDefault();
-    setResetError('');
-    setResetting(true);
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) {
-      setResetError(error.message);
-    } else {
-      setResetSuccess(true);
-      setTimeout(() => {
-        setShowPasswordReset(false);
-        setNewPassword('');
-        setResetSuccess(false);
-      }, 2000);
-    }
-    setResetting(false);
-  }
+  // Theme
+  useEffect(() => {
+    if (darkMode) document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+  }, [darkMode]);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="animate-spin w-10 h-10 border-2 border-sky-500 border-t-transparent rounded-full" />
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-slate-400 animate-pulse">Loading Compass Atlantic...</div>
       </div>
     );
   }
 
-  if (!session) {
+  if (!session || !profile) {
     return <AuthPage onAuth={() => {}} />;
   }
 
-  const isAdmin = profile?.role === 'admin';
+  const handleLogout = () => supabase.auth.signOut();
 
-  const localTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  const utcTime = now.toUTCString().slice(17, 25);
-  const localDate = now.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  const savePilotSettings = async () => {
+    if (!session?.user?.id) return;
+    setSavingPilot(true);
+    setPilotSaveMsg('');
+    const { error } = await supabase.from('profiles').update({
+      pilot_name: pilotName,
+      pilot_id: pilotId,
+      email: pilotEmail,
+      simbrief_id: simbriefId,
+    }).eq('id', session.user.id);
+    if (error) {
+      setPilotSaveMsg(`Error: ${error.message}`);
+    } else {
+      setPilotSaveMsg('Settings saved successfully.');
+      fetchProfile(session.user.id);
+    }
+    setSavingPilot(false);
+  };
 
-  const topNavItems = [
+  const handlePasswordReset = async () => {
+    setResetMsg('');
+    setResetErr('');
+    if (!resetEmail.trim()) {
+      setResetErr('Please enter your email address.');
+      return;
+    }
+    const { error } = await resetPasswordForEmail(resetEmail.trim());
+    if (error) {
+      setResetErr(error.message);
+    } else {
+      setResetMsg('Password reset link sent. Check your email.');
+      setResetEmail('');
+    }
+  };
+
+  const handlePasswordUpdate = async () => {
+    setPasswordUpdateMsg('');
+    setPasswordUpdateErr('');
+    if (!newPassword || newPassword.length < 6) {
+      setPasswordUpdateErr('Password must be at least 6 characters.');
+      return;
+    }
+    const { error } = await updatePassword(newPassword);
+    if (error) {
+      setPasswordUpdateErr(error.message);
+    } else {
+      setPasswordUpdateMsg('Password updated successfully.');
+      setNewPassword('');
+    }
+  };
+
+  const navItems = [
     { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'dispatch' as const, label: 'Dispatch/Logging', icon: Radio },
-    { id: 'livemap' as const, label: 'Live Map', icon: Map },
+    { id: 'dispatch' as const, label: 'Dispatch', icon: ClipboardList },
+    { id: 'capacity' as const, label: 'Capacity', icon: Calculator },
+    { id: 'routeplanner' as const, label: 'Route Planner', icon: Navigation },
+    { id: 'livemap' as const, label: 'Live Map', icon: Globe },
   ];
 
   const flightOpsItems = [
+    { id: 'acars' as const, label: 'ACARS', icon: Radio },
+    { id: 'routenetwork' as const, label: 'Route Network', icon: Map },
+  ];
+
+  const managementItems = [
     { id: 'fleet' as const, label: 'Fleet', icon: Plane },
-    { id: 'gates' as const, label: 'Gates', icon: DoorOpen },
+    { id: 'gates' as const, label: 'Gates', icon: Building2 },
     { id: 'finances' as const, label: 'Finances', icon: DollarSign },
   ];
 
-  const paxOpsItems = [
-    { id: 'planner' as const, label: 'Planner', icon: Navigation },
-    { id: 'capacity' as const, label: 'Capacity', icon: Gauge },
-  ];
+  const adminItems = profile?.role === 'admin' ? [
+    { id: 'admin' as const, label: 'Admin Panel', icon: Settings },
+    { id: 'analytics' as const, label: 'Analytics', icon: BarChart3 },
+  ] : [];
 
-  const bottomNavItems = [
-    { id: 'acars' as const, label: 'ACARS', icon: Radar },
-    ...(isAdmin ? [
-      { id: 'admin' as const, label: 'Admin', icon: Settings },
-    ] : []),
-  ];
+  const allNavItems = [...navItems, ...flightOpsItems, ...managementItems, ...adminItems];
 
   return (
-    <div className="min-h-screen bg-slate-900 flex">
-      {/* Mobile header bar */}
-      <div className="fixed top-0 left-0 right-0 z-40 h-14 bg-slate-800 border-b border-slate-700 flex items-center px-4 lg:hidden">
-        <button
-          onClick={() => setMobileMenuOpen(true)}
-          className="p-2 text-slate-400 hover:text-white rounded-lg"
-        >
-          <Menu className="w-5 h-5" />
-        </button>
-        <div className="flex items-center gap-2 ml-3">
-          <Plane className="w-4 h-4 text-sky-400" />
-          <span className="text-white font-semibold text-sm">Compass Atlantic</span>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <SimConnectIndicator />
-          <span className="text-xs text-cyan-400 font-mono">{utcTime.slice(0, 5)}Z</span>
-        </div>
-      </div>
-
-      {/* Mobile overlay backdrop */}
-      {mobileMenuOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/60 lg:hidden"
-          onClick={() => setMobileMenuOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 z-50 flex flex-col bg-slate-800 border-r border-slate-700 transition-all duration-300 ${
-        sidebarCollapsed ? 'w-[68px]' : 'w-60'
-      } ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
-        {/* Logo area */}
-        <div className="flex items-center gap-3 px-4 h-16 border-b border-slate-700 shrink-0">
-          <div className="w-9 h-9 bg-sky-500/10 rounded-lg flex items-center justify-center shrink-0">
-            <Plane className="w-5 h-5 text-sky-400" />
-          </div>
-          {!sidebarCollapsed && (
-            <div className="overflow-hidden flex-1">
-              <h1 className="text-white font-bold text-sm leading-tight whitespace-nowrap">Compass Atlantic</h1>
-              <p className="text-slate-500 text-[10px]">PAX Demand System</p>
-            </div>
-          )}
-          {/* Mobile close button */}
-          <button
-            onClick={() => setMobileMenuOpen(false)}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg lg:hidden"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {topNavItems.map(item => {
-            const Icon = item.icon;
-            const isActive = activeView === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => { setActiveView(item.id); setMobileMenuOpen(false); }}
-                title={sidebarCollapsed ? item.label : undefined}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                  isActive
-                    ? 'bg-sky-500/10 text-sky-400'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-                }`}
-              >
-                <Icon className="w-[18px] h-[18px] shrink-0" />
-                {!sidebarCollapsed && <span className="whitespace-nowrap">{item.label}</span>}
-              </button>
-            );
-          })}
-
-          {/* Flight Ops dropdown */}
-          <div>
-            <button
-              onClick={() => { if (sidebarCollapsed) { setActiveView('fleet'); setMobileMenuOpen(false); } else { setFlightOpsOpen(!flightOpsOpen); } }}
-              title={sidebarCollapsed ? 'Flight Ops' : undefined}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                flightOpsItems.some(i => activeView === i.id)
-                  ? 'bg-sky-500/10 text-sky-400'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-              }`}
-            >
-              <Plane className="w-[18px] h-[18px] shrink-0" />
-              {!sidebarCollapsed && (
-                <>
-                  <span className="whitespace-nowrap flex-1 text-left">Flight Ops</span>
-                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${flightOpsOpen ? 'rotate-180' : ''}`} />
-                </>
-              )}
-            </button>
-            {!sidebarCollapsed && flightOpsOpen && (
-              <div className="mt-1 ml-5 pl-3 border-l border-slate-700 space-y-0.5">
-                {flightOpsItems.map(item => {
-                  const Icon = item.icon;
-                  const isActive = activeView === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => { setActiveView(item.id); setMobileMenuOpen(false); }}
-                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all ${
-                        isActive
-                          ? 'bg-sky-500/10 text-sky-400 font-medium'
-                          : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-                      }`}
-                    >
-                      <Icon className="w-4 h-4 shrink-0" />
-                      <span className="whitespace-nowrap">{item.label}</span>
-                    </button>
-                  );
-                })}
+    <div className={`min-h-screen ${darkMode ? 'dark bg-slate-950' : 'bg-slate-100'} transition-colors`}>
+      <div className="flex h-screen overflow-hidden">
+        {/* Sidebar */}
+        <aside className={`w-64 shrink-0 ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'} border-r flex flex-col`}>
+          <div className="p-4 border-b border-slate-200 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <Plane className="w-7 h-7 text-sky-500" />
+              <div>
+                <h1 className="text-base font-bold text-slate-900 dark:text-white">Compass Atlantic</h1>
+                <p className="text-xs text-slate-500">Virtual Airline Ops</p>
               </div>
-            )}
+            </div>
           </div>
 
-          {/* Pax Ops dropdown */}
-          <div>
-            <button
-              onClick={() => { if (sidebarCollapsed) { setActiveView('planner'); setMobileMenuOpen(false); } else { setPaxOpsOpen(!paxOpsOpen); } }}
-              title={sidebarCollapsed ? 'Pax Ops' : undefined}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                paxOpsItems.some(i => activeView === i.id)
-                  ? 'bg-sky-500/10 text-sky-400'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-              }`}
-            >
-              <Users className="w-[18px] h-[18px] shrink-0" />
-              {!sidebarCollapsed && (
-                <>
-                  <span className="whitespace-nowrap flex-1 text-left">Pax Ops</span>
-                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${paxOpsOpen ? 'rotate-180' : ''}`} />
-                </>
-              )}
-            </button>
-            {!sidebarCollapsed && paxOpsOpen && (
-              <div className="mt-1 ml-5 pl-3 border-l border-slate-700 space-y-0.5">
-                {paxOpsItems.map(item => {
-                  const Icon = item.icon;
-                  const isActive = activeView === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => { setActiveView(item.id); setMobileMenuOpen(false); }}
-                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all ${
-                        isActive
-                          ? 'bg-sky-500/10 text-sky-400 font-medium'
-                          : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-                      }`}
-                    >
-                      <Icon className="w-4 h-4 shrink-0" />
-                      <span className="whitespace-nowrap">{item.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+            {navItems.map(item => (
+              <NavButton key={item.id} item={item} activeView={activeView} setActiveView={setActiveView} darkMode={darkMode} />
+            ))}
 
-          {bottomNavItems.map(item => {
-            const Icon = item.icon;
-            const isActive = activeView === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => { setActiveView(item.id); setMobileMenuOpen(false); }}
-                title={sidebarCollapsed ? item.label : undefined}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                  isActive
-                    ? 'bg-sky-500/10 text-sky-400'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-                }`}
-              >
-                <Icon className="w-[18px] h-[18px] shrink-0" />
-                {!sidebarCollapsed && <span className="whitespace-nowrap">{item.label}</span>}
-              </button>
-            );
-          })}
-        </nav>
+            <div className="pt-3 pb-1 px-3 text-xs font-semibold uppercase text-slate-400">Flight Ops</div>
+            {flightOpsItems.map(item => (
+              <NavButton key={item.id} item={item} activeView={activeView} setActiveView={setActiveView} darkMode={darkMode} />
+            ))}
 
-        {/* Clock section */}
-        <div className={`px-3 py-3 border-t border-slate-700 ${sidebarCollapsed ? 'text-center' : ''}`}>
-          {!sidebarCollapsed && (
-            <div className="mb-2">
-              <SimConnectIndicator />
-            </div>
-          )}
-          {sidebarCollapsed ? (
-            <div className="flex flex-col items-center gap-0.5">
-              <Clock className="w-3.5 h-3.5 text-slate-500" />
-              <span className="text-[10px] text-cyan-400 font-mono">{utcTime.slice(0, 5)}</span>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              <div className="flex items-center gap-1.5 text-xs">
-                <Clock className="w-3 h-3 text-slate-500" />
-                <span className="text-slate-400">{localDate}</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs font-mono">
-                <span className="text-slate-300">{localTime} <span className="text-slate-500">LCL</span></span>
-                <span className="text-slate-600">|</span>
-                <span className="text-cyan-400">{utcTime} <span className="text-cyan-600">UTC</span></span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mt-1">
-                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                Demand generates at 0400Z
-              </div>
-            </div>
-          )}
-        </div>
+            <div className="pt-3 pb-1 px-3 text-xs font-semibold uppercase text-slate-400">Management</div>
+            {managementItems.map(item => (
+              <NavButton key={item.id} item={item} activeView={activeView} setActiveView={setActiveView} darkMode={darkMode} />
+            ))}
 
-        {/* User + collapse */}
-        <div className="px-3 py-3 border-t border-slate-700 shrink-0">
-          {sidebarCollapsed ? (
-            <div className="flex flex-col items-center gap-2">
-              <div className="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center">
-                <Users className="w-4 h-4 text-slate-400" />
-              </div>
-              <button
-                onClick={handleSignOut}
-                className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-700 rounded-lg transition-all"
-                title="Sign Out"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center shrink-0">
-                  <Users className="w-4 h-4 text-slate-400" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-white text-sm font-medium leading-tight truncate">{profile?.display_name}</p>
-                  <p className="text-slate-500 text-xs">{isAdmin ? 'Admin' : 'Pilot'}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  onClick={() => { setShowPilotSettings(true); setSimbriefInput(profile?.simbrief_id || ''); setSimbriefSaved(false); }}
-                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-all"
-                  title="Pilot Settings"
-                >
-                  <Settings className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleSignOut}
-                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-all"
-                  title="Sign Out"
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Theme + Collapse toggle */}
-        <div className="px-3 py-2 border-t border-slate-700 shrink-0 flex items-center gap-1 overflow-hidden">
-          <button
-            onClick={() => { setWin98Mode(!win98Mode); if (!win98Mode) setWin7Mode(false); }}
-            className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs transition-all shrink-0 ${
-              win98Mode ? 'text-teal-400 bg-teal-500/10' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-700/50'
-            }`}
-            title={win98Mode ? 'Disable retro mode' : 'Enable Windows 98 mode'}
-          >
-            <Monitor className="w-4 h-4" />
-            {!sidebarCollapsed && <span>W98</span>}
-          </button>
-          <button
-            onClick={() => { setWin7Mode(!win7Mode); if (!win7Mode) setWin98Mode(false); }}
-            className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs transition-all shrink-0 ${
-              win7Mode ? 'text-sky-400 bg-sky-500/10' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-700/50'
-            }`}
-            title={win7Mode ? 'Disable Aero mode' : 'Enable Windows 7 mode'}
-          >
-            <Laptop className="w-4 h-4" />
-            {!sidebarCollapsed && <span>W7</span>}
-          </button>
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-all shrink-0"
-            title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            {!sidebarCollapsed && <span>{darkMode ? 'Light' : 'Dark'}</span>}
-          </button>
-          <button
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="hidden lg:flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-all ml-auto shrink-0"
-          >
-            {sidebarCollapsed ? (
-              <PanelLeft className="w-4 h-4" />
-            ) : (
+            {adminItems.length > 0 && (
               <>
-                <PanelLeftClose className="w-4 h-4" />
-                <span>Collapse</span>
+                <div className="pt-3 pb-1 px-3 text-xs font-semibold uppercase text-slate-400">Administration</div>
+                {adminItems.map(item => (
+                  <NavButton key={item.id} item={item} activeView={activeView} setActiveView={setActiveView} darkMode={darkMode} />
+                ))}
               </>
             )}
-          </button>
-        </div>
-      </aside>
+          </nav>
 
-      {/* Main content */}
-      <main className={`flex-1 transition-all duration-300 pt-14 lg:pt-0 ${
-        sidebarCollapsed ? 'lg:ml-[68px]' : 'lg:ml-60'
-      }`}>
-        <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 sm:py-8">
-          {activeView === 'dashboard' && (
-            <Dashboard airports={airports} routes={routes} userRole={isAdmin ? 'admin' : 'user'} />
-          )}
+          {/* Bottom nav */}
+          <div className="p-3 border-t border-slate-200 dark:border-slate-800 space-y-1">
+            <button
+              onClick={() => setShowPilotSettings(true)}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${darkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-700 hover:bg-slate-100'}`}
+            >
+              <UserIcon className="w-4 h-4" />
+              <span className="truncate">{profile?.pilot_name || profile?.email || 'Pilot'}</span>
+            </button>
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${darkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-700 hover:bg-slate-100'}`}
+            >
+              {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              <span>{darkMode ? 'Light Mode' : 'Dark Mode'}</span>
+            </button>
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-red-500 hover:bg-red-500/10 transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Logout</span>
+            </button>
+          </div>
+        </aside>
 
-          {activeView === 'dispatch' && (
-            <Dispatch airports={airports} routes={routes} currentUserId={session?.user?.id || null} isAdmin={isAdmin} />
-          )}
-
-          {activeView === 'fleet' && (
-            <Fleet airports={airports} isAdmin={isAdmin} />
-          )}
-
-          {activeView === 'gates' && (
-            <Gates airports={airports} isAdmin={isAdmin} />
-          )}
-
-          {activeView === 'finances' && (
-            <Finances isAdmin={isAdmin} />
-          )}
-
-          {activeView === 'planner' && (
-            <RoutePlanner airports={airports} routes={routes} />
-          )}
-
-          {activeView === 'capacity' && (
-            <CapacityChecker airports={airports} routes={routes} />
-          )}
-
-          {activeView === 'acars' && (
-            <Acars airports={airports} routes={routes} currentUserId={session?.user?.id || null} isAdmin={isAdmin} simbriefId={profile?.simbrief_id} onTelemetryUpdate={handleTelemetryUpdate} />
-          )}
-
-          {activeView === 'livemap' && (
-            <LiveMap currentUserId={session?.user?.id || null} liveTelemetry={mapLiveTelemetry} />
-          )}
-
-          {activeView === 'admin' && isAdmin && (
-            <AdminPanel
-              airports={airports}
-              routes={routes}
-              onRefresh={fetchAirportsAndRoutes}
-            />
-          )}
-        </div>
-      </main>
-
-      {showPilotSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-          <div className="bg-slate-800 rounded-2xl p-8 border border-slate-700 shadow-2xl w-full max-w-md">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 bg-sky-500/10 rounded-lg flex items-center justify-center">
-                <Settings className="w-5 h-5 text-sky-400" />
+        {/* Main content */}
+        <main className="flex-1 overflow-y-auto">
+          <div className="p-6">
+            {/* Header bar */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <SimConnectIndicator connected={simConnected} />
+                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-sm">
+                  <Clock className="w-4 h-4" />
+                  <span className="font-mono">{currentTime.toLocaleString('en-US', { timeZone: 'UTC', hour12: false })} UTC</span>
+                </div>
               </div>
-              <div>
-                <h2 className="text-lg font-semibold text-white">Pilot Settings</h2>
-                <p className="text-slate-400 text-xs">Configure your external integrations</p>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs px-2 py-1 rounded-full ${profile?.role === 'admin' ? 'bg-sky-500/20 text-sky-400' : 'bg-slate-600/20 text-slate-400'}`}>
+                  {profile?.role?.toUpperCase() || 'PILOT'}
+                </span>
               </div>
-              <button
-                onClick={() => setShowPilotSettings(false)}
-                className="ml-auto p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg"
-              >
-                <X className="w-4 h-4" />
-              </button>
             </div>
 
-            <div className="space-y-5">
-              {/* SimBrief Pilot ID */}
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">SimBrief Pilot ID</label>
-                <p className="text-xs text-slate-500 mb-2">
-                  Find this in your SimBrief account under Account Settings. It's the numeric "Pilot ID" used to fetch your generated OFPs.
-                </p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={simbriefInput}
-                    onChange={(e) => { setSimbriefInput(e.target.value); setSimbriefSaved(false); }}
-                    placeholder="e.g. 123456"
-                    className="flex-1 px-4 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-all font-mono"
-                  />
-                  <button
-                    onClick={async () => {
-                      if (!session?.user?.id) return;
-                      setSimbriefSaving(true);
-                      const val = simbriefInput.trim() || null;
-                      await supabase.from('profiles').update({ simbrief_id: val }).eq('id', session.user.id);
-                      setProfile(prev => prev ? { ...prev, simbrief_id: val } : prev);
-                      setSimbriefSaving(false);
-                      setSimbriefSaved(true);
-                    }}
-                    disabled={simbriefSaving}
-                    className="px-4 py-2.5 bg-sky-500 hover:bg-sky-400 disabled:bg-slate-600 text-white font-semibold rounded-lg transition-all text-sm"
-                  >
-                    {simbriefSaving ? '...' : 'Save'}
-                  </button>
-                </div>
-                {simbriefSaved && (
-                  <p className="text-xs text-emerald-400 mt-1.5">SimBrief ID saved successfully.</p>
-                )}
-              </div>
+            {activeView === 'dashboard' && <Dashboard airports={airports} routes={routes} profile={profile} />}
+            {activeView === 'dispatch' && <Dispatch airports={airports} routes={routes} profile={profile} onRefresh={refreshData} />}
+            {activeView === 'fleet' && <Fleet />}
+            {activeView === 'gates' && <Gates airports={airports} />}
+            {activeView === 'finances' && <Finances />}
+            {activeView === 'acars' && (
+              <Acars
+                telemetry={telemetry}
+                simConnected={simConnected}
+                profile={profile}
+                routes={routes}
+                airports={airports}
+                activeFlightId={activeFlightId}
+                setActiveFlightId={setActiveFlightId}
+                acarsFlights={acarsFlights}
+              />
+            )}
+            {activeView === 'admin' && <AdminPanel airports={airports} routes={routes} onRefresh={refreshData} />}
+            {activeView === 'analytics' && <Analytics airports={airports} routes={routes} />}
+            {activeView === 'capacity' && <CapacityChecker airports={airports} routes={routes} />}
+            {activeView === 'routeplanner' && <RoutePlanner airports={airports} routes={routes} />}
+            {activeView === 'livemap' && <LiveMap flights={acarsFlights} positions={flightPositions} telemetry={telemetry} profile={profile} />}
+            {activeView === 'routenetwork' && (<RouteNetwork airports={airports} routes={routes} />)}
+          </div>
+        </main>
+      </div>
 
-              {/* Change password shortcut */}
-              <div className="pt-4 border-t border-slate-700">
-                <button
-                  onClick={() => { setShowPilotSettings(false); setShowPasswordReset(true); }}
-                  className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors"
-                >
-                  <KeyRound className="w-4 h-4" />
-                  Change Password
-                </button>
+      {/* Pilot Settings Modal */}
+      {showPilotSettings && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className={`w-full max-w-md ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'} border rounded-xl p-6`}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Pilot Settings</h2>
+              <button onClick={() => setShowPilotSettings(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                <Settings className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">Pilot Name</label>
+                <input
+                  type="text"
+                  value={pilotName}
+                  onChange={e => setPilotName(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white text-sm"
+                />
               </div>
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">Pilot ID</label>
+                <input
+                  type="text"
+                  value={pilotId}
+                  onChange={e => setPilotId(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">Email</label>
+                <input
+                  type="email"
+                  value={pilotEmail}
+                  onChange={e => setPilotEmail(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">SimBrief ID</label>
+                <input
+                  type="text"
+                  value={simbriefId}
+                  onChange={e => setSimbriefId(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white text-sm"
+                />
+              </div>
+              {pilotSaveMsg && (
+                <p className={`text-sm ${pilotSaveMsg.startsWith('Error') ? 'text-red-400' : 'text-emerald-400'}`}>{pilotSaveMsg}</p>
+              )}
+              <button
+                onClick={savePilotSettings}
+                disabled={savingPilot}
+                className="w-full px-4 py-2 bg-sky-500 hover:bg-sky-400 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+              >
+                {savingPilot ? 'Saving...' : 'Save Settings'}
+              </button>
+              <button
+                onClick={() => { setShowPilotSettings(false); setShowPasswordReset(true); }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+              >
+                <KeyRound className="w-4 h-4" />
+                Reset Password
+              </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Password Reset Modal */}
       {showPasswordReset && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-          <div className="bg-slate-800 rounded-2xl p-8 border border-slate-700 shadow-2xl w-full max-w-md">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 bg-sky-500/10 rounded-lg flex items-center justify-center">
-                <KeyRound className="w-5 h-5 text-sky-400" />
-              </div>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className={`w-full max-w-md ${darkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'} border rounded-xl p-6`}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Password Reset</h2>
+              <button onClick={() => setShowPasswordReset(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                <Settings className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
               <div>
-                <h2 className="text-lg font-semibold text-white">Set New Password</h2>
-                <p className="text-slate-400 text-xs">Choose a new password for your account</p>
+                <label className="text-xs text-slate-500 mb-1 block">Email Address</label>
+                <input
+                  type="email"
+                  value={resetEmail}
+                  onChange={e => setResetEmail(e.target.value)}
+                  placeholder="pilot@compassatlantic.com"
+                  className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white text-sm"
+                />
+              </div>
+              {resetMsg && <p className="text-sm text-emerald-400">{resetMsg}</p>}
+              {resetErr && <p className="text-sm text-red-400">{resetErr}</p>}
+              <button
+                onClick={handlePasswordReset}
+                className="w-full px-4 py-2 bg-sky-500 hover:bg-sky-400 text-white rounded-lg text-sm font-medium transition-all"
+              >
+                Send Reset Link
+              </button>
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
+                <label className="text-xs text-slate-500 mb-1 block">Update Password (if logged in)</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  placeholder="New password"
+                  className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white text-sm"
+                />
+                {passwordUpdateMsg && <p className="text-sm text-emerald-400 mt-2">{passwordUpdateMsg}</p>}
+                {passwordUpdateErr && <p className="text-sm text-red-400 mt-2">{passwordUpdateErr}</p>}
+                <button
+                  onClick={handlePasswordUpdate}
+                  className="w-full mt-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-all"
+                >
+                  Update Password
+                </button>
               </div>
             </div>
-
-            {resetSuccess ? (
-              <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-sm text-center">
-                Password updated successfully! Redirecting...
-              </div>
-            ) : (
-              <form onSubmit={handlePasswordUpdate} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">New Password</label>
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    required
-                    minLength={6}
-                    className="w-full px-4 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-all"
-                    placeholder="Min 6 characters"
-                    autoFocus
-                  />
-                </div>
-                {resetError && (
-                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
-                    {resetError}
-                  </div>
-                )}
-                <button
-                  type="submit"
-                  disabled={resetting}
-                  className="w-full py-3 bg-sky-500 hover:bg-sky-400 text-white font-semibold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {resetting ? 'Updating...' : 'Update Password'}
-                </button>
-              </form>
-            )}
           </div>
         </div>
       )}
 
       <AppUpdater />
     </div>
+  );
+}
+
+function NavButton({ item, activeView, setActiveView, darkMode }: {
+  item: { id: ActiveView; label: string; icon: React.FC<{ className?: string }> };
+  activeView: ActiveView;
+  setActiveView: (v: ActiveView) => void;
+  darkMode: boolean;
+}) {
+  const Icon = item.icon;
+  const isActive = activeView === item.id;
+  return (
+    <button
+      onClick={() => setActiveView(item.id)}
+      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+        isActive
+          ? 'bg-sky-500 text-white font-medium'
+          : darkMode
+            ? 'text-slate-300 hover:bg-slate-800'
+            : 'text-slate-700 hover:bg-slate-100'
+      }`}
+    >
+      <Icon className="w-4 h-4" />
+      <span>{item.label}</span>
+    </button>
   );
 }
